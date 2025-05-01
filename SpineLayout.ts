@@ -131,6 +131,10 @@ export class SpineLayout extends Container {
         // });
     }
 
+    getAnimations(): string[] {
+        return Array.from(this.animations.keys());
+    }
+
     private stripModificators(animationName: string) {
         const modificator = Object.values(modificators).find((mod) => animationName.includes(mod));
 
