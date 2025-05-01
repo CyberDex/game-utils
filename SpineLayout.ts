@@ -1,0 +1,240 @@
+import { Spine } from '@esotericsoftware/spine-pixi-v8';
+import { type AssetsManifest, Container, Text, UnresolvedAsset } from "pixi.js";
+
+const bonesPointers = {
+    spine: 'spine_',
+    text: 'text_',
+}
+
+const modificators = {
+    loop: '_loop',
+    // TODO: add more modificators
+    // random: '_random',
+}
+
+type SpineID = string;
+type AnimationName = string;
+type AnimationsRegistry = Map<SpineID, AnimationName[]>;
+
+export class SpineLayout extends Container {
+    private rootSpine: Spine | null = null;
+    private spines: Map<SpineID, Spine> = new Map();
+    private animations: Map<SpineID, AnimationsRegistry> = new Map();
+
+    /**
+     * Sets the root spine for the layout.
+     * @param spineID - ID of the spine to set as root
+     */
+    setRootSpine(spineID: string) {
+        const spine = this.spines.get(spineID);
+
+        if (spine) {
+            if (this.rootSpine) {
+                this.removeChild(this.rootSpine);
+            }
+
+            this.rootSpine = spine;
+
+            this.addChild(spine);
+        } else {
+            console.error(`Spine ${spineID} not found`);
+        }
+    }
+
+    /**
+     * Create a spine instance by skeleton and atlas.
+     * @param skeleton - skeleton asset name
+     * @param atlas - atlas asset name
+     */
+    createInstance(skeleton: string, atlas: string) {
+        const spine = Spine.from({ skeleton, atlas });
+        const spineID = atlas.replace(/\.atlas/, '');
+
+        this.spines.set(spineID, spine);
+
+        // console.log(spineID, spine.state.data.skeletonData.animations.map((a) => a.name));
+
+        const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
+
+        animations.forEach((animation) => {
+            const noModAnimation = this.stripModificators(animation);
+
+            if (!this.animations.has(noModAnimation)) {
+                const animationsRegistry: AnimationsRegistry = new Map();
+
+                this.animations.set(noModAnimation, animationsRegistry);
+            }
+
+            const animations: string[] = this.animations.get(noModAnimation)?.get(spineID) ?? [];
+
+            animations.push(animation);
+
+            this.animations.get(noModAnimation)?.set(spineID, animations);
+        });
+
+        this.attachBones();
+        this.attachTexts();
+
+        if (!this.rootSpine && spineID === 'root') {
+            this.setRootSpine(spineID);
+        }
+    }
+
+    /**
+     * Parse the manifest and create spine instances from it.
+     * @param manifest - pixi assets manifest to create spine instances from
+     */
+    createInstancesFromManifest(manifest: AssetsManifest) {
+        const spines = this.getSpinesFromManifest(manifest);
+
+        for (const [_, val] of spines) {
+            this.createInstance(val.skel, val.atlas);
+        }
+    }
+
+    /**
+     * Tryes to play an animation based on the name of the animation for each of the created spine instances.
+     * Will only play the animation if the animation name is found in the spine instance.
+     * @param animationName The name of the animation to play
+     */
+    play(animationName: string) {
+        this.animations.get(animationName)?.forEach((animations, spineID) => {
+            animations.forEach((animation) => {
+                const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
+                // const modificatorsParameters = Object.values(animationModificators).map((mod) => {
+                //     if (animation.includes(mod)) {
+                //         return animation.split(mod)[1];
+                //     }
+                // });
+
+                console.log(`▶️`, spineID, animation, modificators);
+
+                this.spines.get(spineID)?.state.setAnimation(0, animation, mod.includes(modificators.loop));
+
+                // TODO: add more modificators
+                // modificators.forEach((mod) => {                    
+                //     switch (mod.includes(modificators.loop)) {
+                //         case value:
+
+                //             break;
+
+                //         default:
+                //             break;
+                //     }
+                // });
+            });
+        });
+        // this.spines.forEach((spine) => {
+        //     spine.state.data.skeletonData.animations.forEach((animation) => {
+        //         if (animation.name.startsWith(animationName)) {
+        //             
+        //         }
+        //     });
+        // });
+    }
+
+    private stripModificators(animationName: string) {
+        const modificator = Object.values(modificators).find((mod) => animationName.includes(mod));
+
+        if (modificator) {
+            return animationName.split(modificator)[0];
+        }
+
+        return animationName;
+    }
+
+    private attachBones() {
+        this.spines.forEach((spine) => {
+            spine?.state.data.skeletonData.slots.forEach((slot) => {
+                if (slot.name.startsWith(bonesPointers.spine)) {
+                    const childSpineKey = slot.name.replace(bonesPointers.spine, '');
+                    const childSpine = this.spines.get(childSpineKey);
+
+                    if (childSpine) {
+                        spine.addSlotObject(slot.name, childSpine);
+                    }
+                }
+            });
+        });
+    }
+
+    private attachTexts() {
+        this.spines.forEach((spine) => {
+            spine?.state.data.skeletonData.bones.forEach((bone) => {
+                if (bone.name.startsWith(bonesPointers.text)) {
+                    const textKey = bone.name.replace(bonesPointers.text, '');
+                    // TODO: update text with the state values
+                    const textValue = 'TEXT'; // Replace with the actual text object
+                    const text = new Text({
+                        text: textValue,
+                        // TODO: get style from spine
+                        style: {
+                            fontFamily: 'Arial',
+                            fontSize: 24,
+                            fill: 0xffffff,
+                            align: 'center',
+                        },
+                    });
+
+                    if (text) {
+                        spine.addSlotObject(bone.name, text);
+                    } else {
+                        console.error(`Text ${textKey} not found for bone ${bone.name}`);
+                    }
+                }
+            });
+        });
+    }
+
+    private getSpinesFromManifest(manifest: AssetsManifest): SpinesMap {
+        const spinesMap: SpinesMap = new Map();
+
+        manifest.bundles.forEach((bundle: UnresolvedAsset) => {
+            const skeletons = this.getAssetByType(bundle, 'skel');
+            const jsons = this.getAssetByType(bundle, 'json');
+            const atlases = this.getAssetByType(bundle, 'atlas');
+            const pngs = this.getAssetByType(bundle, 'png');
+
+            atlases?.forEach((atlas) => {
+                const atlasID = atlas.replace(/\.atlas/, '');
+                const hasJSON = jsons?.includes(`${atlasID}.json`);
+                const hasSKEL = skeletons?.includes(`${atlasID}.skel`);
+                const hasPNG = pngs?.includes(`${atlasID}.png`);
+
+                if ((hasJSON || hasSKEL) && hasPNG) {
+                    const skel = hasJSON ? `${atlasID}.json` : `${atlasID}.skel`;
+                    const texture = `${atlasID}.png`;
+
+                    spinesMap.set(atlasID, {
+                        atlas,
+                        skel,
+                        texture
+                    });
+                }
+            });
+        });
+
+        // console.log(spinesMap);
+
+        return spinesMap;
+    }
+
+    private getAssetByType(bundle: UnresolvedAsset, type: string): string[] | undefined {
+        if (Array.isArray(bundle.assets)) {
+            const assets = bundle.assets
+                .filter(({ alias }) => alias[alias.length - 1].endsWith(type))
+                .map(({ alias }) => alias[alias.length - 1]);
+
+            return assets;
+        } else {
+            bundle.assets.endsWith(type);
+        }
+    }
+}
+
+type SpinesMap = Map<string, SpineData>;
+type SpineData = {
+    atlas: string;
+    skel: string;
+    texture: string;
+};
