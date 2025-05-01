@@ -85,11 +85,9 @@ export class SpineLayout extends Container {
      * @param manifest - pixi assets manifest to create spine instances from
      */
     createInstancesFromManifest(manifest: AssetsManifest) {
-        const spines = this.getSpinesFromManifest(manifest);
-
-        for (const [_, val] of spines) {
-            this.createInstance(val.skel, val.atlas);
-        }
+        this.getSpinesFromManifest(manifest).forEach((spine) => {
+            this.createInstance(spine.skel, spine.atlas);
+        });
     }
 
     /**
@@ -186,8 +184,8 @@ export class SpineLayout extends Container {
         });
     }
 
-    private getSpinesFromManifest(manifest: AssetsManifest): SpinesMap {
-        const spinesMap: SpinesMap = new Map();
+    private getSpinesFromManifest(manifest: AssetsManifest): SpineData[] {
+        const spinesMap: SpineData[] = [];
 
         manifest.bundles.forEach((bundle: UnresolvedAsset) => {
             const skeletons = this.getAssetByType(bundle, 'skel');
@@ -205,7 +203,7 @@ export class SpineLayout extends Container {
                     const skel = hasJSON ? `${atlasID}.json` : `${atlasID}.skel`;
                     const texture = `${atlasID}.png`;
 
-                    spinesMap.set(atlasID, {
+                    spinesMap.push({
                         atlas,
                         skel,
                         texture
@@ -232,7 +230,6 @@ export class SpineLayout extends Container {
     }
 }
 
-type SpinesMap = Map<string, SpineData>;
 type SpineData = {
     atlas: string;
     skel: string;
