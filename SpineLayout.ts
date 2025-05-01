@@ -109,6 +109,7 @@ export class SpineLayout extends Container {
 
                 console.log(`▶️`, spineID, animation, modificators);
 
+                this.playByID(spineID, animation);
                 this.spines.get(spineID)?.state.setAnimation(0, animation, mod.includes(modificators.loop));
 
                 const animationPromise = new Promise<void>((resolve) => {
@@ -132,15 +133,19 @@ export class SpineLayout extends Container {
                 // });
             });
         });
-        // this.spines.forEach((spine) => {
-        //     spine.state.data.skeletonData.animations.forEach((animation) => {
-        //         if (animation.name.startsWith(animationName)) {
-        //             
-        //         }
-        //     });
-        // });
-
         return Promise.all(animationsPromises);
+    }
+
+    async playByID(spineID: string, animation: string) {
+        const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
+
+        this.spines.get(spineID)?.state.setAnimation(0, animation, mod.includes(modificators.loop));
+
+        return new Promise<void>((resolve) => {
+            this.spines.get(spineID)?.state.addListener({
+                complete: () => resolve()
+            });
+        })
     }
 
     getAnimations(): string[] {
