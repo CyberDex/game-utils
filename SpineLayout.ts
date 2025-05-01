@@ -95,7 +95,9 @@ export class SpineLayout extends Container {
      * Will only play the animation if the animation name is found in the spine instance.
      * @param animationName The name of the animation to play
      */
-    play(animationName: string) {
+    async play(animationName: string) {
+        const animationsPromises: Promise<void>[] = [];
+
         this.animations.get(animationName)?.forEach((animations, spineID) => {
             animations.forEach((animation) => {
                 const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
@@ -108,6 +110,14 @@ export class SpineLayout extends Container {
                 console.log(`▶️`, spineID, animation, modificators);
 
                 this.spines.get(spineID)?.state.setAnimation(0, animation, mod.includes(modificators.loop));
+
+                const animationPromise = new Promise<void>((resolve) => {
+                    this.spines.get(spineID)?.state.addListener({
+                        complete: () => resolve()
+                    });
+                });
+
+                animationsPromises.push(animationPromise);
 
                 // TODO: add more modificators
                 // modificators.forEach((mod) => {                    
@@ -129,6 +139,8 @@ export class SpineLayout extends Container {
         //         }
         //     });
         // });
+
+        return Promise.all(animationsPromises);
     }
 
     getAnimations(): string[] {
