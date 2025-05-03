@@ -1,7 +1,7 @@
 import { Spine } from '@esotericsoftware/spine-pixi-v8';
 import { type AssetsManifest, Container, Text, UnresolvedAsset } from "pixi.js";
 
-const bonesPointers = {
+const slotPointers = {
     spine: 'spine_',
     text: 'text_',
 }
@@ -20,6 +20,7 @@ export class SpineLayout extends Container {
     private rootSpine: Spine | null = null;
     private spines: Map<SpineID, Spine> = new Map();
     private animations: Map<SpineID, AnimationsRegistry> = new Map();
+    private texts: Map<SpineID, Text> = new Map();
 
     /**
      * Sets the root spine for the layout.
@@ -72,8 +73,8 @@ export class SpineLayout extends Container {
             this.animations.get(noModAnimation)?.set(spineID, animations);
         });
 
-        this.attachBones();
-        this.attachTexts();
+        this.attachSpinesToSlots();
+        this.createStotsTexts();
 
         if (!this.rootSpine && spineID === 'root') {
             this.setRootSpine(spineID);
@@ -152,6 +153,17 @@ export class SpineLayout extends Container {
         return Array.from(this.animations.keys());
     }
 
+    setText(spineID: string, text: string) {
+        const textObject = this.texts.get(spineID);
+        console.log(textObject, text);
+
+        if (textObject) {
+            textObject.text = text;
+        } else {
+            console.error(`Text ${spineID} not found`);
+        }
+    }
+
     private stripModificators(animationName: string) {
         const modificator = Object.values(modificators).find((mod) => animationName.includes(mod));
 
@@ -162,30 +174,32 @@ export class SpineLayout extends Container {
         return animationName;
     }
 
-    private attachBones() {
+    private attachSpinesToSlots() {
         this.spines.forEach((spine) => {
             spine?.state.data.skeletonData.slots.forEach((slot) => {
-                if (slot.name.startsWith(bonesPointers.spine)) {
-                    const childSpineKey = slot.name.replace(bonesPointers.spine, '');
+                if (slot.name.startsWith(slotPointers.spine)) {
+                    const childSpineKey = slot.name.replace(slotPointers.spine, '');
                     const childSpine = this.spines.get(childSpineKey);
 
                     if (childSpine) {
                         spine.addSlotObject(slot.name, childSpine);
+
+                        // console.log(`!!! ${childSpineKey} > ${slot.name}`);
                     }
                 }
             });
         });
     }
 
-    private attachTexts() {
+    private createStotsTexts() {
         this.spines.forEach((spine) => {
-            spine?.state.data.skeletonData.bones.forEach((bone) => {
-                if (bone.name.startsWith(bonesPointers.text)) {
-                    const textKey = bone.name.replace(bonesPointers.text, '');
+            spine?.state.data.skeletonData.slots.forEach((slot) => {
+                if (slot.name.startsWith(slotPointers.text)) {
+                    const textKey = slot.name.replace(slotPointers.text, '');
+
                     // TODO: update text with the state values
-                    const textValue = 'TEXT'; // Replace with the actual text object
                     const text = new Text({
-                        text: textValue,
+                        text: slot.name,
                         // TODO: get style from spine
                         style: {
                             fontFamily: 'Arial',
@@ -195,10 +209,14 @@ export class SpineLayout extends Container {
                         },
                     });
 
+                    text.anchor.set(0.5, 0.5);
+
+                    this.texts.set(textKey, text);
+
                     if (text) {
-                        spine.addSlotObject(bone.name, text);
+                        spine.addSlotObject(slot.name, text);
                     } else {
-                        console.error(`Text ${textKey} not found for bone ${bone.name}`);
+                        console.error(`Text ${textKey} not found for bone ${slot.name}`);
                     }
                 }
             });
