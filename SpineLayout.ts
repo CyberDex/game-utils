@@ -48,12 +48,19 @@ export class SpineLayout extends Container {
      * @param atlas - atlas asset name
      */
     createInstance(skeleton: string, atlas: string) {
-        const spine = Spine.from({ skeleton, atlas });
         const spineID = atlas.replace(/\.atlas/, '');
+
+        console.log(`create spine`, {
+            skeleton,
+            atlas,
+            spineID,
+            // animations: spine.state.data.skeletonData.animations.map((a) => a.name)
+        });
+
+        const spine = Spine.from({ skeleton, atlas });
 
         this.spines.set(spineID, spine);
 
-        // console.log(spineID, spine.state.data.skeletonData.animations.map((a) => a.name));
 
         const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
 
@@ -108,7 +115,7 @@ export class SpineLayout extends Container {
                 //     }
                 // });
 
-                console.log(`▶️`, spineID, animation, modificators);
+                // console.log(`▶️`, spineID, animation, modificators);
 
                 this.playByID(spineID, animation);
                 this.spines.get(spineID)?.state.setAnimation(0, animation, mod.includes(modificators.loop));
@@ -155,7 +162,7 @@ export class SpineLayout extends Container {
 
     setText(spineID: string, text: string) {
         const textObject = this.texts.get(spineID);
-        console.log(textObject, text);
+        // console.log(textObject, text);
 
         if (textObject) {
             textObject.text = text;
