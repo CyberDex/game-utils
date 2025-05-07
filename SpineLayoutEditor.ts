@@ -3,7 +3,7 @@ import { FileHandle, FileSystemController } from "./FileSystemController";
 import { SpineLayout } from "./SpineLayout";
 
 export class SpineLayoutEditor {
-    fs: FileSystemController;
+    private fs: FileSystemController;
 
     constructor(private layout: SpineLayout) {
         this.fs = new FileSystemController();
@@ -37,15 +37,12 @@ export class SpineLayoutEditor {
     private async loadSpine(files: FileHandle[]) {
         console.log('Loading spine files:', files);
 
-        let image: string;
-        let skel: string;
-        let atlas: string;
-
-        const createSpine = () => {
-            if (image && skel && atlas) {
-                this.layout.createInstance(skel, atlas);
-            }
-        }
+        const spinesData: Map<string, {
+            image?: string;
+            skel?: Uint8Array | ArrayBuffer;
+            atlas?: string;
+            skelType?: 'JSON' | 'skel';
+        }> = new Map();
 
         for await (const fileData of files) {
             const file = await fileData.getFile();
@@ -60,53 +57,51 @@ export class SpineLayoutEditor {
             }
 
             reader.onload = async (event) => {
+                const name = this.stripFileName(file.name)
+                const spineData = spinesData.get(name) || {};
+
                 if (file.type.match(/image/)) {
-                    if (Assets.cache.has(file.name)) {
-                        Assets.cache.remove(file.name);
-                    }
-
-                    await Assets.load(event.target!.result as string);
-
-                    Assets.cache.set(
-                        file.name,
-                        Assets.cache.get(event.target!.result as string),
-                    );
-
-                    image = file.name;
+                    spinesData.set(name, {
+                        ...spineData,
+                        image: event.target!.result as string
+                    });
                 } else if (file.type === 'application/json') {
-                    if (Assets.cache.has(file.name)) {
-                        Assets.cache.remove(file.name);
-                    }
-                    Assets.cache.set(
-                        file.name,
-                        JSON.parse(event.target!.result as string),
-                    );
-
-                    skel = file.name;
+                    spinesData.set(name, {
+                        ...spineData,
+                        skel: JSON.parse(event.target!.result as string),
+                        skelType: 'JSON'
+                    });
                 } else if (/^.+\.skel$/.test(file.name)) {
-                    if (Assets.cache.has(file.name)) {
-                        Assets.cache.remove(file.name);
-                    }
-                    Assets.cache.set(
-                        file.name,
-                        event.target!.result,
-                    );
-
-                    skel = file.name;
+                    spinesData.set(name, {
+                        ...spineData,
+                        skel: event.target!.result as Uint8Array,
+                        skelType: 'skel'
+                    });
                 } else if (/^.+\.atlas$/.test(file.name)) {
-                    if (Assets.cache.has(file.name)) {
-                        Assets.cache.remove(file.name);
-                    }
-                    Assets.cache.set(
-                        file.name,
-                        event.target!.result as string
-                    );
-
-                    atlas = file.name;
+                    spinesData.set(name, {
+                        ...spineData,
+                        atlas: event.target!.result as string
+                    });
                 }
 
-                createSpine();
+                const spine = spinesData.get(name);
+
+                if (spine?.image && spine?.skel && spine?.atlas) {
+                    console.log('Creating spine instance:', spine);
+
+                    this.layout.createInstanceFromData(name, spine.skel, spine.atlas, spine.image, spine.skelType === 'skel');
+                }
             };
         };
+    }
+
+    private stripFileName(fileName: string): string {
+        const parts = fileName.split('.');
+
+        if (parts.length === 2) {
+            return parts[0];
+        } else {
+            return fileName;
+        }
     }
 }

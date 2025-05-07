@@ -1,5 +1,5 @@
-import { Spine } from '@esotericsoftware/spine-pixi-v8';
-import { type AssetsManifest, Container, Text, UnresolvedAsset } from "pixi.js";
+import { AtlasAttachmentLoader, SkeletonBinary, SkeletonData, SkeletonJson, Spine, TextureAtlas } from '@esotericsoftware/spine-pixi-v8';
+import { Assets, type AssetsManifest, Container, Text, Texture, UnresolvedAsset } from "pixi.js";
 
 const slotPointers = {
     spine: 'spine_',
@@ -42,6 +42,50 @@ export class SpineLayout extends Container {
         }
     }
 
+    async createInstanceFromData(
+        spineID: string,
+        skeleton: Uint8Array | ArrayBuffer,
+        atlas: string,
+        image: string,
+        isSkel: boolean) {
+
+        console.log(`create spine`, {
+            skeleton,
+            atlas,
+            spineID,
+            // animations: spine.state.data.skeletonData.animations.map((a) => a.name)
+        });
+
+        const texture: Texture = await Assets.load(image);
+        const spineAtlas = new TextureAtlas(atlas);
+        debugger;
+        // Inject rendererObject manually
+        for (const page of spineAtlas.pages) {
+            // Manually assign Pixi baseTexture to Spine rendererObject
+            (page as any).rendererObject = texture.baseTexture;
+
+            // These must also be set
+            page.width = texture.baseTexture.width;
+            page.height = texture.baseTexture.height;
+        }
+
+        let skeletonData: SkeletonData;
+
+        if (isSkel) {
+            const spineBinaryParser = new SkeletonBinary(new AtlasAttachmentLoader(spineAtlas));
+            skeletonData = spineBinaryParser.readSkeletonData(new Uint8Array(skeleton));
+        } else {
+            const spineJsonParser = new SkeletonJson(new AtlasAttachmentLoader(spineAtlas));
+            skeletonData = spineJsonParser.readSkeletonData(skeleton);
+        }
+
+        setTimeout(() => {
+            const spine = new Spine(skeletonData);
+
+            this.initSpine(spineID, spine);
+        }, 250);
+    }
+
     /**
      * Create a spine instance by skeleton and atlas.
      * @param skeleton - skeleton asset name
@@ -54,13 +98,17 @@ export class SpineLayout extends Container {
             skeleton,
             atlas,
             spineID,
+            asset: Assets.cache.get(skeleton)
             // animations: spine.state.data.skeletonData.animations.map((a) => a.name)
         });
 
         const spine = Spine.from({ skeleton, atlas });
 
-        this.spines.set(spineID, spine);
+        this.initSpine(spineID, spine);
+    }
 
+    private initSpine(spineID: string, spine: Spine) {
+        this.spines.set(spineID, spine);
 
         const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
 
