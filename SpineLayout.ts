@@ -100,8 +100,7 @@ export class SpineLayout extends Container {
         const animationsPromises: Promise<void>[] = [];
 
         this.animations.get(animationName)?.forEach((animations, spineID) => {
-            animations.forEach((animation) => {
-                const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
+            animations.forEach(async (animation) => {
                 // const modificatorsParameters = Object.values(animationModificators).map((mod) => {
                 //     if (animation.includes(mod)) {
                 //         return animation.split(mod)[1];
@@ -110,16 +109,7 @@ export class SpineLayout extends Container {
 
                 // console.log(`▶️`, spineID, animation, modificators);
 
-                this.playByID(spineID, animation);
-                this.spines.get(spineID)?.state.setAnimation(0, animation, mod.includes(modificators.loop));
-
-                const animationPromise = new Promise<void>((resolve) => {
-                    this.spines.get(spineID)?.state.addListener({
-                        complete: () => resolve()
-                    });
-                });
-
-                animationsPromises.push(animationPromise);
+                animationsPromises.push(this.playByID(spineID, animation));
 
                 // TODO: add more modificators
                 // modificators.forEach((mod) => {                    
@@ -139,18 +129,45 @@ export class SpineLayout extends Container {
 
     async playByID(spineID: string, animation: string) {
         const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
+        const spine = this.spines.get(spineID)?.state;
 
-        this.spines.get(spineID)?.state.setAnimation(0, animation, mod.includes(modificators.loop));
+        if (!spine) {
+            console.error(`Spine ${spineID} not found`);
+            return;
+        }
+
+        if (this.isAnimationPlaying(spineID, animation)) {
+            return Promise.resolve();
+        }
+
+        spine.setAnimation(0, animation, mod.includes(modificators.loop));
 
         return new Promise<void>((resolve) => {
             this.spines.get(spineID)?.state.addListener({
                 complete: () => resolve()
             });
-        })
+        });
     }
 
     getAnimations(): string[] {
         return Array.from(this.animations.keys());
+    }
+
+    private isAnimationPlaying(spineID: string, animation: string) {
+        const spine = this.spines.get(spineID)?.state;
+
+        if (!spine) {
+            return false;
+        }
+
+        const currentTrackEntry = spine.getCurrent(0);
+        let currentAnimation;
+
+        if (currentTrackEntry) {
+            currentAnimation = currentTrackEntry.animation?.name;
+        }
+
+        return currentAnimation === animation;
     }
 
     private stripModificators(animationName: string) {
@@ -195,9 +212,11 @@ export class SpineLayout extends Container {
                             fontSize: 52,
                             fill: 0x212a4f,
                             align: 'center',
-                            lineJoin: 'round',
-                            stroke: 0xffffff,
-                            strokeThickness: 6,
+                            stroke: {
+                                color: 0xffffff,
+                                width: 6,
+                                join: 'round',
+                            }
                         },
                     });
 
