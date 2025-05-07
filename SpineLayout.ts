@@ -20,6 +20,7 @@ export class SpineLayout extends Container {
     private rootSpine: Spine | null = null;
     private spines: Map<SpineID, Spine> = new Map();
     private animations: Map<SpineID, AnimationsRegistry> = new Map();
+    private texts: Map<SpineID, Text> = new Map();
 
     /**
      * Sets the root spine for the layout.
@@ -32,6 +33,8 @@ export class SpineLayout extends Container {
             if (this.rootSpine) {
                 this.removeChild(this.rootSpine);
             }
+
+            spine.y = -spine.height / 2;
 
             this.rootSpine = spine;
 
@@ -47,7 +50,7 @@ export class SpineLayout extends Container {
      * @param atlas - atlas asset name
      */
     createInstance(skeleton: string, atlas: string) {
-        const spine = Spine.from({ skeleton, atlas });
+        const spine = Spine.from({ skeleton, atlas, scale: 1 });
         const spineID = atlas.replace(/\.atlas/, '');
 
         this.spines.set(spineID, spine);
@@ -195,6 +198,10 @@ export class SpineLayout extends Container {
                         },
                     });
 
+                    text.anchor.set(0.5, 0.5);
+
+                    this.texts.set(textKey, text);
+
                     if (text) {
                         spine.addSlotObject(bone.name, text);
                     } else {
@@ -247,6 +254,17 @@ export class SpineLayout extends Container {
             return assets;
         } else {
             bundle.assets.endsWith(type);
+        }
+    }
+
+    setText(spineID: string, text: string) {
+        const textObject = this.texts.get(spineID);
+        // console.log(textObject, text);
+
+        if (textObject) {
+            textObject.text = text;
+        } else {
+            console.error(`Text ${spineID} not found`);
         }
     }
 }
