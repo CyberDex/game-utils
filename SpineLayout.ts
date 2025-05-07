@@ -34,8 +34,6 @@ export class SpineLayout extends Container {
                 this.removeChild(this.rootSpine);
             }
 
-            spine.y = -spine.height / 2;
-
             this.rootSpine = spine;
 
             this.addChild(spine);
@@ -55,7 +53,7 @@ export class SpineLayout extends Container {
 
         this.spines.set(spineID, spine);
 
-        // console.log(spineID, spine.state.data.skeletonData.animations.map((a) => a.name));
+        console.log(spineID, spine.state.data.skeletonData.animations.map((a) => a.name));
 
         const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
 
@@ -166,7 +164,7 @@ export class SpineLayout extends Container {
     }
 
     private attachBones() {
-        this.spines.forEach((spine) => {
+        this.spines.forEach((spine, id) => {
             spine?.state.data.skeletonData.slots.forEach((slot) => {
                 if (slot.name.startsWith(bonesPointers.spine)) {
                     const childSpineKey = slot.name.replace(bonesPointers.spine, '');
@@ -174,6 +172,8 @@ export class SpineLayout extends Container {
 
                     if (childSpine) {
                         spine.addSlotObject(slot.name, childSpine);
+
+                        console.log(`Spine ${childSpineKey} added to ${id}(${slot.name})`);
                     }
                 }
             });
