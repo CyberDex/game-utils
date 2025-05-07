@@ -1,5 +1,5 @@
 import { Spine } from '@esotericsoftware/spine-pixi-v8';
-import { type AssetsManifest, Container, Text, UnresolvedAsset } from "pixi.js";
+import { type AssetsManifest, Container, Text, type UnresolvedAsset } from "pixi.js";
 
 const bonesPointers = {
     spine: 'spine_',
@@ -53,7 +53,7 @@ export class SpineLayout extends Container {
 
         this.spines.set(spineID, spine);
 
-        console.log(spineID, spine.state.data.skeletonData.animations.map((a) => a.name));
+        // console.log(spineID, spine.state.data.skeletonData.animations.map((a) => a.name));
 
         const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
 
@@ -108,7 +108,7 @@ export class SpineLayout extends Container {
                 //     }
                 // });
 
-                console.log(`▶️`, spineID, animation, modificators);
+                // console.log(`▶️`, spineID, animation, modificators);
 
                 this.playByID(spineID, animation);
                 this.spines.get(spineID)?.state.setAnimation(0, animation, mod.includes(modificators.loop));
@@ -173,7 +173,7 @@ export class SpineLayout extends Container {
                     if (childSpine) {
                         spine.addSlotObject(slot.name, childSpine);
 
-                        console.log(`Spine ${childSpineKey} added to ${id}(${slot.name})`);
+                        // console.log(`Spine ${childSpineKey} added to ${id}(${slot.name})`);
                     }
                 }
             });
@@ -191,10 +191,13 @@ export class SpineLayout extends Container {
                         text: textValue,
                         // TODO: get style from spine
                         style: {
-                            fontFamily: 'Arial',
-                            fontSize: 24,
-                            fill: 0xffffff,
+                            fontFamily: 'Rubik',
+                            fontSize: 52,
+                            fill: 0x212a4f,
                             align: 'center',
+                            lineJoin: 'round',
+                            stroke: 0xffffff,
+                            strokeThickness: 6,
                         },
                     });
 
