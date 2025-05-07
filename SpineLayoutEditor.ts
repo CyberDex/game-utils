@@ -1,5 +1,5 @@
 import { Assets } from "pixi.js";
-import { FileData, FileHandle, FileSystemController, FolderData } from "./FileSystemController";
+import { FileHandle, FileSystemController } from "./FileSystemController";
 import { SpineLayout } from "./SpineLayout";
 
 export class SpineLayoutEditor {
@@ -37,9 +37,9 @@ export class SpineLayoutEditor {
     private async loadSpine(files: FileHandle[]) {
         console.log('Loading spine files:', files);
 
-        let image: any;
-        let skel: any;
-        let atlas: string | undefined;
+        let image: string;
+        let skel: string;
+        let atlas: string;
 
         const createSpine = () => {
             if (image && skel && atlas) {
