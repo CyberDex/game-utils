@@ -3,6 +3,13 @@ import ls from 'localstorage-slim';
 import { type Application } from 'pixi.js';
 import type { FolderApi } from 'tweakpane';
 import { Pane } from 'tweakpane';
+
+declare global {
+  interface Window {
+    __PIXI_APP__?: Application;
+  }
+}
+
 import { initMobileConsole, removeMobileConsole } from './tools/MobileConsole';
 import { PixiStats } from './tools/PixiStats';
 
@@ -66,7 +73,7 @@ export class DevTools extends Pane {
   }
 
   set app(app: Application) {
-    (window as any).__PIXI_APP__ = app;
+    window.__PIXI_APP__ = app;
     this.config.app = app;
     this.addPixiStats();
   }
