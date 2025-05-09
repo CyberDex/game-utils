@@ -66,7 +66,7 @@ export class DevTools extends Pane {
   }
 
   set app(app: Application) {
-    window.__PIXI_APP__ = app;
+    (window as any).__PIXI_APP__ = app;
     this.config.app = app;
     this.addPixiStats();
   }
