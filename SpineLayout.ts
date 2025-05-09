@@ -181,7 +181,7 @@ export class SpineLayout extends Container {
   }
 
   private attachBones() {
-    this.spines.forEach((spine, id) => {
+    this.spines.forEach((spine) => {
       spine?.state.data.skeletonData.slots.forEach((slot) => {
         if (slot.name.startsWith(bonesPointers.spine)) {
           const childSpineKey = slot.name.replace(bonesPointers.spine, '');
