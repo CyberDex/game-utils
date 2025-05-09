@@ -7,28 +7,28 @@ const isEnabled = ls.get(lsName);
 let erudaInitiated = false;
 
 if (isEnabled === true) {
-    initMobileConsole();
+  initMobileConsole();
 }
 
 export function initMobileConsole() {
-    ls.set(lsName, true);
+  ls.set(lsName, true);
 
-    if (erudaInitiated) return;
+  if (erudaInitiated) return;
 
-    erudaInitiated = true;
+  erudaInitiated = true;
 
-    eruda.init();
-    eruda.position({ x: -20, y: window.innerHeight });
-    window.addEventListener('resize', () => {
-        eruda.position({ x: window.innerWidth / 2 - 20, y: window.innerHeight });
-    });
+  eruda.init();
+  eruda.position({ x: -20, y: window.innerHeight });
+  window.addEventListener('resize', () => {
+    eruda.position({ x: window.innerWidth / 2 - 20, y: window.innerHeight });
+  });
 }
 
 export function removeMobileConsole() {
-    ls.set(lsName, false);
+  ls.set(lsName, false);
 
-    if (!erudaInitiated) return;
+  if (!erudaInitiated) return;
 
-    eruda.destroy();
-    erudaInitiated = false;
+  eruda.destroy();
+  erudaInitiated = false;
 }
