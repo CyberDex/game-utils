@@ -22,6 +22,10 @@ export class SpineLayout extends Container {
   private animations: Map<SpineID, AnimationsRegistry> = new Map();
   private texts: Map<SpineID, Text> = new Map();
 
+  constructor(private debug = false) {
+    super();
+  }
+
   /**
    * Sets the root spine for the layout.
    * @param spineID - ID of the spine to set as root
@@ -53,7 +57,9 @@ export class SpineLayout extends Container {
 
     this.spines.set(spineID, spine);
 
-    // console.log(spineID, spine.state.data.skeletonData.animations.map((a) => a.name));
+    if (this.debug) {
+      console.log(spineID, spine.state.data.skeletonData.animations.map((a) => a.name));
+    }
 
     const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
 
@@ -107,7 +113,9 @@ export class SpineLayout extends Container {
         //     }
         // });
 
-        // console.log(`▶️`, spineID, animation, modificators);
+        if (this.debug) {
+          console.log(`▶️`, spineID, animation, modificators);
+        }
 
         animationsPromises.push(this.playByID(spineID, animation));
 
@@ -182,7 +190,7 @@ export class SpineLayout extends Container {
 
   private attachBones() {
     this.spines.forEach((spine) => {
-      spine?.state.data.skeletonData.slots.forEach((slot) => {
+      spine?.state.data.skeletonData.slots.forEach((slot, id) => {
         if (slot.name.startsWith(bonesPointers.spine)) {
           const childSpineKey = slot.name.replace(bonesPointers.spine, '');
           const childSpine = this.spines.get(childSpineKey);
@@ -190,7 +198,10 @@ export class SpineLayout extends Container {
           if (childSpine) {
             spine.addSlotObject(slot.name, childSpine);
 
-            // console.log(`Spine ${childSpineKey} added to ${id}(${slot.name})`);
+
+            if (this.debug) {
+              console.log(`Spine ${childSpineKey} added to ${id}(${slot.name})`);
+            }
           }
         }
       });
