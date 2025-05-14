@@ -1,7 +1,7 @@
-import { SlotData, Spine } from '@esotericsoftware/spine-pixi-v8';
-import { type AssetsManifest, Container, Text, Ticker, TilingSprite, type UnresolvedAsset } from 'pixi.js';
+import { AtlasAttachmentLoader, SkeletonBinary, SkeletonData, SkeletonJson, SlotData, Spine, TextureAtlas } from '@esotericsoftware/spine-pixi-v8';
+import { Assets, type AssetsManifest, Container, Text, Texture, Ticker, TilingSprite, type UnresolvedAsset } from 'pixi.js';
 
-const bonesPointers = {
+const slotPointers = {
     spine: 'spine_',
     text: 'text_',
     tile: [
@@ -50,6 +50,65 @@ export class SpineLayout extends Container {
             window.addEventListener('resize', () => this.resize());
             this.on('childAdded', () => this.resize());
         }
+    }
+
+    async createInstanceFromData(
+        spineID: string,
+        skeleton: Uint8Array | ArrayBuffer,
+        atlas: string,
+        image: string,
+        isSkel: boolean) {
+
+        console.log(`create spine`, {
+            skeleton,
+            atlas,
+            spineID,
+            // animations: spine.state.data.skeletonData.animations.map((a) => a.name)
+        });
+
+        const texture: Texture = await Assets.load(image);
+        const spineAtlas = new TextureAtlas(atlas);
+
+        Assets.cache.set(`${spineID}_atlas`, spineAtlas);
+
+        let skeletonData: SkeletonData;
+
+        if (isSkel) {
+            const spineBinaryParser = new SkeletonBinary(new AtlasAttachmentLoader(spineAtlas));
+            skeletonData = spineBinaryParser.readSkeletonData(new Uint8Array(skeleton));
+            Assets.cache.set(`${spineID}_skel`, skeletonData);
+        } else {
+            const spineJsonParser = new SkeletonJson(new AtlasAttachmentLoader(spineAtlas));
+            skeletonData = spineJsonParser.readSkeletonData(skeleton);
+            Assets.cache.set(`${spineID}_skel`, skeletonData);
+        }
+
+        const spine = Spine.from({
+            skeleton: `${spineID}_skel`,
+            atlas: `${spineID}_atlas`,
+        });
+
+        // this.addChild(spine);
+
+        console.log(`!!! createInstance`, {
+            texture,
+            skeletonData,
+            spineAtlas,
+            spine
+        });
+
+
+        // this.createInstance(skeletonData, spineAtlas);
+        // Inject rendererObject manually
+        // for (const page of spineAtlas.pages) {
+        //     // Manually assign Pixi baseTexture to Spine rendererObject
+        //     page.rendererObject = texture.baseTexture;
+
+        //     // These must also be set
+        //     page.width = texture.baseTexture.width;
+        //     page.height = texture.baseTexture.height;
+        // }
+
     }
 
     /**
@@ -177,7 +236,7 @@ export class SpineLayout extends Container {
      * @param skeleton - skeleton asset name
      * @param atlas - atlas asset name
      */
-    private createInstance(skeleton: string, atlas: string) {
+    private createInstance(skeleton: SkeletonData, atlas: string) {
         const spine = Spine.from({ skeleton, atlas, scale: 1 });
         const spineID = atlas.replace(/\.atlas/, '');
 
@@ -294,13 +353,13 @@ export class SpineLayout extends Container {
 
     private attachTexts() {
         this.spines.forEach((spine) => {
-            spine?.state.data.skeletonData.bones.forEach((bone) => {
-                if (bone.name.startsWith(bonesPointers.text)) {
-                    const textKey = bone.name.replace(bonesPointers.text, '');
+            spine?.state.data.skeletonData.slots.forEach((slot) => {
+                if (slot.name.startsWith(slotPointers.text)) {
+                    const textKey = slot.name.replace(slotPointers.text, '');
+
                     // TODO: update text with the state values
-                    const textValue = 'TEXT'; // Replace with the actual text object
                     const text = new Text({
-                        text: textValue,
+                        text: slot.name,
                         // TODO: get style from spine
                         style: {
                             fontFamily: 'Rubik',
@@ -320,9 +379,9 @@ export class SpineLayout extends Container {
                     this.texts.set(textKey, text);
 
                     if (text) {
-                        spine.addSlotObject(bone.name, text);
+                        spine.addSlotObject(slot.name, text);
                     } else {
-                        console.error(`Text ${textKey} not found for bone ${bone.name}`);
+                        console.error(`Text ${textKey} not found for bone ${slot.name}`);
                     }
                 }
             });
@@ -539,6 +598,6 @@ export class SpineLayout extends Container {
 
 type SpineData = {
     atlas: string;
-    skel: string;
+    skel: SkeletonData;
     texture: string;
 };
