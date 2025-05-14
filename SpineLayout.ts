@@ -12,7 +12,7 @@ import {
   type AssetsManifest,
   Container,
   Text,
-  Texture,
+  // Texture,
   Ticker,
   TilingSprite,
   type UnresolvedAsset,
