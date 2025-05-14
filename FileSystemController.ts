@@ -80,7 +80,7 @@ export class FileSystemController {
           {
             description: 'Images',
             accept: {
-              '*/*': [fileTypes],
+              '*/*': fileTypes ?? [],
             },
           },
         ],
