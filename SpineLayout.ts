@@ -64,7 +64,7 @@ export class SpineLayout extends Container {
     spineID: string,
     skeleton: Uint8Array | ArrayBuffer,
     atlas: string,
-    // image: string,
+    _image: string,
     isSkel: boolean
   ) {
     console.log(`create spine`, {

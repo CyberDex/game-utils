@@ -1,5 +1,12 @@
-import { type FileHandle, FileSystemController } from './FileSystemController';
+import { type FileData, type FileHandle, FileSystemController } from './FileSystemController';
 import { SpineLayout } from './SpineLayout';
+
+declare global {
+  interface Window {
+    showDirectoryPicker: (params: { mode: 'reed' | 'write' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
+    showOpenFilePicker: (params: {}) => Promise<FileData>;
+  }
+}
 
 export class SpineLayoutEditor {
   private fs: FileSystemController;
