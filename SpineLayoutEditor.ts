@@ -4,7 +4,7 @@ import { SpineLayout } from './SpineLayout';
 declare global {
   interface Window {
     showDirectoryPicker: (params: { mode: 'reed' | 'write' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
-    showOpenFilePicker: (params: {}) => Promise<FileData>;
+    showOpenFilePicker: (params: { mode: 'reed' | 'write' | 'readwrite' }) => Promise<FileData>;
   }
 }
 
