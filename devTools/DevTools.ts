@@ -4,14 +4,14 @@ import { type Application } from 'pixi.js';
 import type { FolderApi } from 'tweakpane';
 import { Pane } from 'tweakpane';
 
+import { initMobileConsole, removeMobileConsole } from './tools/MobileConsole';
+import { PixiStats } from './tools/PixiStats';
+
 declare global {
   interface Window {
     __PIXI_APP__?: Application;
   }
 }
-
-import { initMobileConsole, removeMobileConsole } from './tools/MobileConsole';
-import { PixiStats } from './tools/PixiStats';
 
 type Position = {
   x: 'left' | 'right';

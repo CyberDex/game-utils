@@ -58,7 +58,10 @@ export class SpineLayout extends Container {
     this.spines.set(spineID, spine);
 
     if (this.debug) {
-      console.log(spineID, spine.state.data.skeletonData.animations.map((a) => a.name));
+      console.log(
+        spineID,
+        spine.state.data.skeletonData.animations.map((a) => a.name)
+      );
     }
 
     const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
@@ -197,7 +200,6 @@ export class SpineLayout extends Container {
 
           if (childSpine) {
             spine.addSlotObject(slot.name, childSpine);
-
 
             if (this.debug) {
               console.log(`Spine ${childSpineKey} added to ${id}(${slot.name})`);
