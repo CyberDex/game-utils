@@ -48,6 +48,7 @@ type SpineLayoutOptions = {
 export class SpineLayout extends Container {
   private spines: Map<SpineID, Spine> = new Map();
   private animations: Map<SpineID, AnimationsRegistry> = new Map();
+  private activeAnimations: string[] = [];
   private texts: Map<SpineID, Text> = new Map();
   private tiles: Map<SpineID, TilingSprite> = new Map();
 
@@ -154,7 +155,16 @@ export class SpineLayout extends Container {
           console.log(`▶️ ${spineID}(${animation})`);
         }
 
-        animationsPromises.push(this.playInstanceAnimation(spineID, animation));
+        const trackID = this.activeAnimations.length + 1;
+        const promise = this.playInstanceAnimation(spineID, animation, trackID);
+
+        promise.then(() => {
+          this.activeAnimations = this.activeAnimations.filter((a) => a !== animation);
+        });
+
+        animationsPromises.push(promise);
+
+        this.activeAnimations.push(animation);
 
         // TODO: add more modificators
         // modificators.forEach((mod) => {
@@ -172,12 +182,69 @@ export class SpineLayout extends Container {
     return Promise.all(animationsPromises);
   }
 
+  async playState(state: string) {
+    const animations = this.getAnimations();
+    const animationsToPlay: Map<SpineID, string[]> = new Map();
+
+    animations.forEach((animationName) => {
+      if (animationName.startsWith(state)) {
+        this.animations.get(animationName)?.forEach((animations, spineID) => {
+          animations.forEach(async (animation) => {
+            const animations = animationsToPlay.get(spineID) ?? [];
+
+            animations.push(animation);
+            animationsToPlay.set(spineID, animations);
+          });
+        });
+      }
+    });
+
+    animationsToPlay.forEach((animations) => {
+      animations.forEach((animation) => {
+        this.play(this.stripModificators(animation));
+      });
+    });
+
+    // console.log(`!!!`, animationsToPlay);
+
+
+    // this.animations.get(animationName)?.forEach((animations, spineID) => {
+    //   animations.forEach(async (animation) => {
+    //     // const modificatorsParameters = Object.values(animationModificators).map((mod) => {
+    //     //     if (animation.includes(mod)) {
+    //     //         return animation.split(mod)[1];
+    //     //     }
+    //     // });
+
+    //     if (this.options?.debug) {
+    //       console.log(`▶️ ${spineID}(${animation})`);
+    //     }
+
+    //     animationsPromises.push(this.playInstanceAnimation(spineID, animation, trackID));
+
+    //     // TODO: add more modificators
+    //     // modificators.forEach((mod) => {
+    //     //     switch (mod.includes(modificators.loop)) {
+    //     //         case value:
+
+    //     //             break;
+
+    //     //         default:
+    //     //             break;
+    //     //     }
+    //     // });
+    //   });
+
+    //   return Promise.all(animationsPromises);
+    // });
+  }
+
   /**
    * Play spine animation by ID.
    * @param spineID - spine ID to play the animation on
    * @param animation - animation name to play
    */
-  async playInstanceAnimation(spineID: string, animation: string) {
+  async playInstanceAnimation(spineID: string, animation: string, trackID = 0) {
     const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
     const spine = this.spines.get(spineID)?.state;
 
@@ -190,7 +257,13 @@ export class SpineLayout extends Container {
       return Promise.resolve();
     }
 
-    spine.setAnimation(0, animation, mod.includes(modificators.loop));
+    console.log(`!!! setAnimation`, {
+      trackID,
+      animation,
+      loop: mod.includes(modificators.loop),
+    });
+
+    spine.setAnimation(trackID, animation, mod.includes(modificators.loop));
 
     return new Promise<void>((resolve) => {
       this.spines.get(spineID)?.state.addListener({
