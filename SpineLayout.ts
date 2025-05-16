@@ -5,6 +5,7 @@ import {
   SkeletonJson,
   SlotData,
   Spine,
+  SpineTexture,
   TextureAtlas,
 } from '@esotericsoftware/spine-pixi-v8';
 import {
@@ -12,6 +13,7 @@ import {
   type AssetsManifest,
   Container,
   Text,
+  Texture,
   // Texture,
   Ticker,
   TilingSprite,
@@ -45,6 +47,12 @@ type SpineLayoutOptions = {
   maxWidth?: number | string;
 };
 
+export type SpineData = {
+  atlas: string;
+  skel: string;
+  textures: { [key: string]: Texture };
+};
+
 export class SpineLayout extends Container {
   private spines: Map<SpineID, Spine> = new Map();
   private animations: Map<SpineID, AnimationsRegistry> = new Map();
@@ -61,61 +69,55 @@ export class SpineLayout extends Container {
     }
   }
 
-  async createInstanceFromData(
-    spineID: string,
-    skeleton: Uint8Array | ArrayBuffer,
-    atlas: string,
-    _image: string,
-    isSkel: boolean
-  ) {
+  createInstanceFromData({
+    skel,
+    atlas,
+    textures
+  }: SpineData): Spine {
     console.log(`create spine`, {
-      skeleton,
+      skel,
       atlas,
-      spineID,
-      // animations: spine.state.data.skeletonData.animations.map((a) => a.name)
+      textures
     });
 
-    // const texture: Texture = await Assets.load(image);
     const spineAtlas = new TextureAtlas(atlas);
 
-    Assets.cache.set(`${spineID}_atlas`, spineAtlas);
+    // Process each page in the atlas
+    for (const page of spineAtlas.pages) {
+      const pageName: string = page.name;
+      const texture = textures[pageName];
 
-    let skeletonData: SkeletonData;
+      if (!texture) {
+        console.error(`Missing texture for page: ${pageName}`);
+        throw new Error(`Missing texture for page: ${pageName}`);
+      }
 
-    if (isSkel) {
-      const spineBinaryParser = new SkeletonBinary(new AtlasAttachmentLoader(spineAtlas));
-      skeletonData = spineBinaryParser.readSkeletonData(new Uint8Array(skeleton));
-      Assets.cache.set(`${spineID}_skel`, skeletonData);
-    } else {
-      const spineJsonParser = new SkeletonJson(new AtlasAttachmentLoader(spineAtlas));
-      skeletonData = spineJsonParser.readSkeletonData(skeleton);
-      Assets.cache.set(`${spineID}_skel`, skeletonData);
+      // Create SpineTexture from the PIXI Texture
+      const spineTexture = SpineTexture.from(texture.source);
+
+      // Set the texture for the page
+      page.setTexture(spineTexture);
+
+      // Handle PMA (Premultiplied Alpha) if needed
+      // if (page.pma) {
+      //     texture.alphaMode = ALPHA_MODES.PREMULTIPLIED_ALPHA;
+      // } else {
+      //     texture.alphaMode = ALPHA_MODES.PREMULTIPLY_ON_UPLOAD;
+      // }
+
     }
 
-    // const spine = Spine.from({
-    //     skeleton: `${spineID}_skel`,
-    //     atlas: `${spineID}_atlas`,
-    // });
+    // Create attachment loader
+    const atlasLoader = new AtlasAttachmentLoader(spineAtlas);
 
-    // this.addChild(spine);
+    // Create skeleton data
+    const skeletonJson = new SkeletonJson(atlasLoader);
+    const skeleton = skeletonJson.readSkeletonData(skel);
 
-    // console.log(`!!! createInstance`, {
-    //     texture,
-    //     skeletonData,
-    //     spineAtlas,
-    //     spine
-    // });
+    // Create spine instance
+    const spine = new Spine(skeleton);
 
-    // this.createInstance(skeletonData, spineAtlas);
-    // Inject rendererObject manually
-    // for (const page of spineAtlas.pages) {
-    //     // Manually assign Pixi baseTexture to Spine rendererObject
-    //     page.rendererObject = texture.baseTexture;
-
-    //     // These must also be set
-    //     page.width = texture.baseTexture.width;
-    //     page.height = texture.baseTexture.height;
-    // }
+    return spine;
   }
 
   /**
@@ -491,7 +493,9 @@ export class SpineLayout extends Container {
           spinesMap.push({
             atlas,
             skel,
-            texture,
+            textures: {
+              [texture]: Texture.from(texture),
+            },
           });
         }
       });
@@ -674,9 +678,3 @@ export class SpineLayout extends Container {
     });
   }
 }
-
-type SpineData = {
-  atlas: string;
-  skel: string;
-  texture: string;
-};

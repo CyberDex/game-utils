@@ -11,7 +11,10 @@ export type FileHandle = Blob & {
   name: string;
   type: string;
   kind: 'file' | 'directory';
-  getFile: () => Promise<FileHandle>;
+  getFile: () => Promise<FileData & {
+    lastModifiedDate: string;
+    directoryHandle: DirHandle;
+  }>;
   getDirectory: () => Promise<DirHandle>;
   lastModifiedDate: string;
   directoryHandle: DirHandle;
@@ -111,11 +114,10 @@ export class FileSystemController {
           }
 
           const fileData = await entry.getFile();
-          const lastChange = Date.parse(fileData.lastModifiedDate);
 
-          if (lastChange !== this.filesHash.get(fileData.name)) {
+          if (fileData.lastModified !== this.filesHash.get(fileData.name)) {
             changedFiles.push(entry as FileHandle);
-            this.filesHash.set(fileData.name, lastChange);
+            this.filesHash.set(fileData.name, fileData.lastModified);
           }
         } catch (error) {
           console.error(error);
@@ -140,7 +142,7 @@ export class FileSystemController {
     }
 
     const dirs = [];
-    const files: Promise<FileHandle>[] = [];
+    const files: Promise<FileData>[] = [];
 
     for await (const entry of handle.values()) {
       const nestedPath = `${path}/${entry.name}`;
@@ -151,15 +153,16 @@ export class FileSystemController {
             continue;
           }
 
-          const getFile = entry.getFile().then((file: FileHandle) => {
-            file.directoryHandle = handle as DirHandle;
+          const getFile = entry.getFile();
+          // .then((file) => {
+          //   (file as any).directoryHandle = handle as DirHandle;
 
-            return Object.defineProperty(file, 'webkitRelativePath', {
-              configurable: true,
-              enumerable: true,
-              get: () => nestedPath,
-            });
-          });
+          //   return Object.defineProperty(file, 'webkitRelativePath', {
+          //     configurable: true,
+          //     enumerable: true,
+          //     get: () => nestedPath,
+          //   });
+          // });
 
           files.push(getFile);
         } catch (error) {
@@ -214,8 +217,8 @@ export type FileData = {
   directoryHandle: FileSystemDirectoryHandle;
   handle: FileSystemFileHandle;
   webkitRelativePath: string;
-  lastModified: string;
-  lastModifiedDate: string;
+  lastModified: number;
+  lastModifiedDate: number;
   name: string;
   size: number;
   type: string;
