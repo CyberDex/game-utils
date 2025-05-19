@@ -99,7 +99,7 @@ export class FileSystemController {
     return null;
   }
 
-  async watch(onChange: (files: FileHandle[]) => void) {
+  async watch(onChange: (files: FileHandle[]) => void, fileTypes?: string[]) {
     if (!this.dirHandle) {
       return;
     }
@@ -114,6 +114,11 @@ export class FileSystemController {
           }
 
           const fileData = await entry.getFile();
+          const fileExtention = entry.name.split('.').pop();
+
+          if (fileTypes?.length && fileExtention && !fileTypes.includes(fileExtention)) {
+            continue;
+          }
 
           if (fileData.lastModified !== this.filesHash.get(fileData.name)) {
             changedFiles.push(entry as FileHandle);
@@ -129,7 +134,7 @@ export class FileSystemController {
       onChange(changedFiles);
     }
 
-    setTimeout(() => this.watch(onChange), 1000);
+    setTimeout(() => this.watch(onChange, fileTypes), 1000);
   }
 
   async getDirFiles(

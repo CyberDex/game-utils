@@ -1,7 +1,5 @@
 import { type FileData, type FileHandle, FileSystemController } from './FileSystemController';
 import { SpineLayout } from './SpineLayout';
-import { SpineLoader } from './SpineLoader';
-import app from '../main';
 
 declare global {
     interface Window {
@@ -21,17 +19,17 @@ declare global {
 
 export class SpineLayoutEditor {
     private fs: FileSystemController;
-    private loader = new SpineLoader();
 
     constructor(private layout: SpineLayout) {
         this.fs = new FileSystemController();
+        this.init();
     }
 
     async init() {
         await this.fs.init();
         this.fs.watch((files: FileHandle[]) => {
             this.onFilesChanged(files);
-        });
+        }, ['atlas', 'json', 'png', 'skel']);
     }
 
     private async onFilesChanged(files: FileHandle[]) {
@@ -53,82 +51,129 @@ export class SpineLayoutEditor {
     }
 
     private async loadSpine(files: FileHandle[]) {
-        const spinesData: Map<
-            string,
-            {
-                image?: string;
-                skel?: Uint8Array | ArrayBuffer;
-                atlas?: string;
-                skelType?: 'JSON' | 'skel';
-            }
-        > = new Map();
+        const spineFiles = this.convertToSpinesMap(files);
 
-        for await (const fileData of files) {
-            const file = await fileData.getFile();
-            const reader = new FileReader();
+        for (const spineFileData of spineFiles) {
+            if (!this.isFullSetOfSpineFiles(spineFileData[1])) {
+                console.warn(`Incomplete set of spine files:`, spineFileData);
 
-            if (file.type.match(/image/)) {
-                reader.readAsDataURL(file);
-            } else if (/^.+\.skel$/.test(file.name)) {
-                reader.readAsArrayBuffer(file);
-            } else {
-                reader.readAsText(file);
+                continue;
             }
 
-            reader.onload = async (event) => {
-                const name = this.stripFileName(file.name);
-                const spineData = spinesData.get(name) || {};
+            const skelFile = await spineFileData[1].skel?.getFile();
+            const atlasFile = await spineFileData[1].atlas?.getFile();
+            const textureFilesPromises = (spineFileData[1].png ?? []).map(async (fileHandle) => await fileHandle.getFile());
+            const textureFiles = await Promise.all(textureFilesPromises);
 
-                if (file.type.match(/image/)) {
-                    spinesData.set(name, {
-                        ...spineData,
-                        image: event.target!.result as string,
-                    });
-                } else if (file.type === 'application/json') {
-                    spinesData.set(name, {
-                        ...spineData,
-                        skel: JSON.parse(event.target!.result as string),
-                        skelType: 'JSON',
-                    });
-                } else if (/^.+\.skel$/.test(file.name)) {
-                    spinesData.set(name, {
-                        ...spineData,
-                        skel: event.target!.result as Uint8Array,
-                        skelType: 'skel',
-                    });
-                } else if (/^.+\.atlas$/.test(file.name)) {
-                    spinesData.set(name, {
-                        ...spineData,
-                        atlas: event.target!.result as string,
-                    });
+            if (!skelFile || !atlasFile) {
+                console.warn(`Incomplete set of spine files:`, spineFileData);
+                continue;
+            }
+
+            if (skelFile && atlasFile && textureFiles.length > 0) {
+                const spineData = await this.layout.loadSpineFiles({
+                    skelFile,
+                    atlasFile,
+                    textureFiles
+                });
+
+                if (spineData) {
+                    this.layout.createInstanceFromData(spineData);
                 }
-
-                const spine = spinesData.get(name);
-
-                if (spine?.image && spine?.skel && spine?.atlas) {
-                    console.log(`Loading spine data:`, files);
-
-                    const spineData = await this.loader.loadSpineFiles(files);
-
-                    if (spineData) {
-                        console.log(`Spine data loaded:`, spineData);
-                        this.layout.createInstanceFromData(spineData)
-                    } else {
-                        console.error(`Error loading spine data:`, spineData);
-                    }
-                }
-            };
-        }
-
+            }
+        };
     }
 
-    private stripFileName(fileName: string): string {
-        const parts = fileName.split('.');
+    private isFullSetOfSpineFiles(files: SpineFilesSet): boolean {
+        const hasRequired = files.atlas !== null && files.png !== null;
+        const hasOptional = files.skel !== null;
 
-        if (parts.length === 2) {
-            return parts[0];
-        } else {
-            return fileName;
-        }
+        return hasRequired && hasOptional;
+    }
+
+    private convertToSpinesMap(files: FileHandle[]): SpineFilesData {
+        const fileMap: SpineFilesData = new Map();
+
+        files.forEach((file) => {
+            const [name, ext] = file.name.split('.');
+
+            if (ext === 'skel' || ext === 'json') {
+                if (!fileMap.has(name)) {
+                    fileMap.set(name, { skel: null, atlas: null, png: [] });
+                }
+
+                const currentEntry = fileMap.get(name);
+
+                currentEntry!.skel = file;
+            } else if (ext === 'atlas') {
+                if (!fileMap.has(name)) {
+                    fileMap.set(name, { skel: null, atlas: null, png: [] });
+                }
+
+                const currentEntry = fileMap.get(name);
+
+                currentEntry!.atlas = file;
+            } else if (ext === 'png') {
+                const baseName = name.replace(/\d+$/, '');
+
+                if (!fileMap.has(baseName)) {
+                    fileMap.set(baseName, { skel: null, atlas: null, png: [] });
+                }
+
+                const currentEntry = fileMap.get(baseName);
+
+                currentEntry!.png?.push(file);
+            }
+        });
+
+        return fileMap;
+    }
+
+    private async addCheats() {
+        const devTools = new DevTools({
+            app: this.pixi,
+            gameName: APP_NAME,
+            gameVersion: this.version,
+        })
+
+        const cheats = devTools.addFolder({
+            title: 'Available Animations',
+            expanded: true,
+        });
+
+        this.layout?.getAnimations().forEach((animation) => {
+            cheats.addButton({ title: animation }).on('click', async () => {
+                console.log(`start: ${animation}`);
+
+                await this.layout?.play(animation);
+
+                console.log(`end: ${animation}`);
+            });
+        });
+
+        const layoutEditor = new SpineLayoutEditor(this.layout!);
+
+
+        devTools.addFolder({
+            title: 'Editor',
+            expanded: true,
+        }).addButton({
+            title: layoutEditor.initialised ? 'Close layout' : 'Open layout',
+        }).on('click', async ({ target }: { target: ButtonApi }) => {
+            if (layoutEditor.initialised) {
+                await layoutEditor.close();
+            } else {
+                await layoutEditor.init();
+            }
+
+            target.title = layoutEditor.initialised ? 'Close layout' : 'Open layout';
+        });
     }
 }
+
+type SpineFilesData = Map<string, SpineFilesSet>;
+type SpineFilesSet = {
+    skel: FileHandle | null;
+    atlas: FileHandle | null;
+    png: FileHandle[] | null;
+};
