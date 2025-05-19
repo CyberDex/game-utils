@@ -1,3 +1,5 @@
+import type { ButtonApi, FolderApi } from 'tweakpane';
+import type { DevTools } from './devTools';
 import { type FileData, type FileHandle, FileSystemController } from './FileSystemController';
 import { SpineLayout } from './SpineLayout';
 
@@ -19,14 +21,23 @@ declare global {
 
 export class SpineLayoutEditor {
     private fs: FileSystemController;
+    private availableAnimations!: FolderApi;
+    private _onClose: (() => void)[] = [];
 
-    constructor(private layout: SpineLayout) {
+    constructor(private layout: SpineLayout, private devTools: DevTools) {
         this.fs = new FileSystemController();
-        this.init();
+        this.init().then(() => {
+            this.addUI();
+        });
+    }
+
+    onClose(cb: () => void) {
+        this._onClose.push(cb);
     }
 
     async init() {
         await this.fs.init();
+
         this.fs.watch((files: FileHandle[]) => {
             this.onFilesChanged(files);
         }, ['atlas', 'json', 'png', 'skel']);
@@ -37,13 +48,29 @@ export class SpineLayoutEditor {
             return;
         }
 
-        // console.log('Files changed:', files);
+        console.log('Files changed:', files.map((file) => file.name));
 
-        this.loadSpine(files);
+        await this.loadSpine(files);
+
+        this.layout?.getAnimations().forEach((animation) => {
+            // this.animationsFolder.children.forEach((child) => {
+            //     child.dispose();
+            // });
+            this.animationsFolder.addButton({ title: animation }).on('click', async () => {
+                console.log(`start: ${animation}`);
+
+                await this.layout?.play(animation);
+
+                console.log(`end: ${animation}`);
+            });
+        });
     }
 
     close() {
+        this._onClose.forEach((cb) => cb());
         this.fs.close();
+        this.animationsFolder.dispose();
+        this.layout?.reset();
     }
 
     get initialised(): boolean {
@@ -114,7 +141,7 @@ export class SpineLayoutEditor {
 
                 currentEntry!.atlas = file;
             } else if (ext === 'png') {
-                const baseName = name.replace(/\d+$/, '');
+                const baseName = name.replace(/_\d+$/, '');
 
                 if (!fileMap.has(baseName)) {
                     fileMap.set(baseName, { skel: null, atlas: null, png: [] });
@@ -129,45 +156,40 @@ export class SpineLayoutEditor {
         return fileMap;
     }
 
-    private async addCheats() {
-        const devTools = new DevTools({
-            app: this.pixi,
-            gameName: APP_NAME,
-            gameVersion: this.version,
-        })
-
-        const cheats = devTools.addFolder({
-            title: 'Available Animations',
-            expanded: true,
-        });
-
-        this.layout?.getAnimations().forEach((animation) => {
-            cheats.addButton({ title: animation }).on('click', async () => {
-                console.log(`start: ${animation}`);
-
-                await this.layout?.play(animation);
-
-                console.log(`end: ${animation}`);
+    private get animationsFolder(): FolderApi {
+        if (!this.availableAnimations) {
+            this.availableAnimations = this.devTools.addFolder({
+                title: 'Animations',
+                expanded: true,
             });
-        });
+        }
 
-        const layoutEditor = new SpineLayoutEditor(this.layout!);
+        return this.availableAnimations;
+    }
 
-
-        devTools.addFolder({
+    private async addUI() {
+        const button = this.devTools.addFolder({
             title: 'Editor',
             expanded: true,
         }).addButton({
-            title: layoutEditor.initialised ? 'Close layout' : 'Open layout',
-        }).on('click', async ({ target }: { target: ButtonApi }) => {
-            if (layoutEditor.initialised) {
-                await layoutEditor.close();
+            title: 'Open layout',
+        }).on('click', async () => {
+            if (this.initialised) {
+                await this.close();
             } else {
-                await layoutEditor.init();
+                await this.init();
             }
 
-            target.title = layoutEditor.initialised ? 'Close layout' : 'Open layout';
+            setTimeout(() => {
+                button.title = this.initialised ? 'Close layout' : 'Open layout';
+            }, 100);
         });
+
+        if (this.initialised) {
+            setTimeout(() => {
+                button.title = 'Close layout';
+            }, 100);
+        }
     }
 }
 

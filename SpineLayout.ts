@@ -1,6 +1,5 @@
 import {
   AtlasAttachmentLoader,
-  SkeletonBinary,
   SkeletonData,
   SkeletonJson,
   SlotData,
@@ -14,7 +13,6 @@ import {
   Container,
   Text,
   Texture,
-  // Texture,
   Ticker,
   TilingSprite,
   type UnresolvedAsset,
@@ -75,6 +73,67 @@ export class SpineLayout extends Container {
     }
   }
 
+  /**
+   * Loads spine files and prepares them for rendering.
+   * @param files - Accepted files, including skeleton, atlas, and texture files.
+   * @param files.skelFile - Skeleton file (.skel or .json)
+   * @param files.atlasFile - Atlas file (.atlas)
+   * @param files.textureFiles - Texture files (.png)
+   * @throws Will throw an error if the files are not valid or if loading fails.
+   * @returns - SpineInstanceData
+   */
+  async loadSpineFiles(files: {
+    skelFile: File,
+    atlasFile: File,
+    textureFiles: File[]
+  }): Promise<SpineInstanceData | null> {
+    const { skelFile, atlasFile, textureFiles } = files;
+
+    try {
+      // Load textures
+      const assetBundle: Record<string, any> = {};
+
+      await Promise.all(textureFiles.map(async (file) => {
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+
+        assetBundle[file.name] = {
+          src: base64,
+          data: { type: file.type }
+        };
+      }));
+
+      // Add and load bundle
+      Assets.addBundle('spineAssets', assetBundle);
+      const textures = await Assets.loadBundle('spineAssets');
+
+      let skeleton;
+
+      if (skelFile.type === 'application/json') {
+        const jsonText = await this.readFileAsText(skelFile);
+        skeleton = JSON.parse(jsonText);
+      } else if (skelFile) {
+        skeleton = await this.readFileAsArrayBuffer(skelFile);
+      } else {
+        throw new Error('No skeleton file (.skel or .json) found');
+      }
+
+      if (!atlasFile) {
+        throw new Error('No atlas file found');
+      }
+      const atlasText = await this.readFileAsText(atlasFile);
+
+      return { skeleton, atlasText, textures };
+    } catch (error) {
+      console.error('Error loading Spine files:', error);
+    }
+
+    return null;
+  }
+
   createInstanceFromData(data: SpineInstanceData) {
     // Create atlas
     const spineAtlas = new TextureAtlas(data.atlasText);
@@ -101,7 +160,6 @@ export class SpineLayout extends Container {
       // } else {
       //     texture.alphaMode = ALPHA_MODES.PREMULTIPLY_ON_UPLOAD;
       // }
-
     }
 
     // Create attachment loader
@@ -112,7 +170,7 @@ export class SpineLayout extends Container {
     const skeletonData = skeletonJson.readSkeletonData(data.skeleton);
 
     const spineInstance = new Spine(skeletonData);
-    const spineID = data.atlasText.replace(/\.atlas/, '');
+    const spineID = data.atlasText.split('.')[0];
 
     this.addSpineInstance(spineID, spineInstance);
 
@@ -131,7 +189,7 @@ export class SpineLayout extends Container {
 
     this.getSpinesFromManifest(manifest).forEach((spine) => {
       const spineInstance = Spine.from({ skeleton: spine.skel, atlas: spine.skel, scale: 1 });
-      const spineID = spine.atlas.replace(/\.atlas/, '');
+      const spineID = spine.atlas.replace(/\.[^.]+$/, '');
 
       this.addSpineInstance(spineID, spineInstance);
     });
@@ -315,14 +373,37 @@ export class SpineLayout extends Container {
     Ticker.shared.remove(this.moveTiles, this);
   }
 
+  reset() {
+    this.spines.forEach((spine) => {
+      spine.destroy();
+    });
+
+    this.spines.clear();
+    this.animations.clear();
+    this.activeAnimations = [];
+    this.texts.clear();
+    this.tiles.clear();
+
+    this.removeChildren();
+  }
+
   /**
    * Add a spine instance to layout.
    * @param spineID - ID of the spine instance
    * @param spine - spine instance to add
    */
   private addSpineInstance(spineID: string, spine: Spine) {
+    if (this.spines.has(spineID)) {
+      this.spines.get(spineID)?.destroy();
+      this.spines.delete(spineID);
+    }
+
     this.spines.set(spineID, spine);
     const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
+
+    if (this.options?.debug) {
+      console.log(`➕ spine ${spineID}`, animations);
+    }
 
     animations.forEach((animation) => {
       const noModAnimation = this.stripModificators(animation);
@@ -369,10 +450,6 @@ export class SpineLayout extends Container {
   }
 
   private attachBones() {
-    if (this.options?.debug) {
-      console.log(`Attach Bones:`);
-    }
-
     this.spines.forEach((spine, id) => {
       spine?.state.data.skeletonData.slots.forEach((slot) => {
         if (slot.name.startsWith(slotPointers.spine)) {
@@ -668,58 +745,6 @@ export class SpineLayout extends Container {
           break;
       }
     });
-  }
-
-  async loadSpineFiles(files: {
-    skelFile: File,
-    atlasFile: File,
-    textureFiles: File[]
-  }): Promise<SpineInstanceData | null> {
-    const { skelFile, atlasFile, textureFiles } = files;
-
-    try {
-      // Load textures
-      const assetBundle: Record<string, any> = {};
-
-      await Promise.all(textureFiles.map(async (file) => {
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-
-        assetBundle[file.name] = {
-          src: base64,
-          data: { type: file.type }
-        };
-      }));
-
-      // Add and load bundle
-      Assets.addBundle('spineAssets', assetBundle);
-      const textures = await Assets.loadBundle('spineAssets');
-
-      let skeleton;
-
-      if (skelFile.type === 'application/json') {
-        const jsonText = await this.readFileAsText(skelFile);
-        skeleton = JSON.parse(jsonText);
-      } else if (skelFile) {
-        skeleton = await this.readFileAsArrayBuffer(skelFile);
-      } else {
-        throw new Error('No skeleton file (.skel or .json) found');
-      }
-
-      if (!atlasFile) {
-        throw new Error('No atlas file found');
-      }
-      const atlasText = await this.readFileAsText(atlasFile);
-
-      return { skeleton, atlasText, textures };
-    } catch (error) {
-      console.error('Error loading Spine files:', error);
-    }
-
-    return null;
   }
 
   private readFileAsText(file: File): Promise<string> {

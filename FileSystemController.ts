@@ -37,15 +37,11 @@ export class FileSystemController {
   async init() {
     const dirHandle = await get<DirHandle>('dirHandle');
 
-    // console.log(`FS init`, dirHandle);
-
     if (dirHandle) {
       this.dirHandle = dirHandle;
 
       try {
         this.folderFiles = await this.getDirFiles(this.dirHandle, this.dirHandle.name);
-
-        // console.log('FS initialized', this.folderFiles);
       } catch (error) {
         console.error(error);
         del('dirHandle');
@@ -159,15 +155,6 @@ export class FileSystemController {
           }
 
           const getFile = entry.getFile();
-          // .then((file) => {
-          //   (file as any).directoryHandle = handle as DirHandle;
-
-          //   return Object.defineProperty(file, 'webkitRelativePath', {
-          //     configurable: true,
-          //     enumerable: true,
-          //     get: () => nestedPath,
-          //   });
-          // });
 
           files.push(getFile);
         } catch (error) {
@@ -187,6 +174,9 @@ export class FileSystemController {
 
   async close() {
     this.dirHandle = null;
+    this.folderFiles = [];
+    this.filesHash.clear();
+
 
     await del('dirHandle');
   }
