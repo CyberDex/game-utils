@@ -1,3 +1,5 @@
+import type { ButtonApi, FolderApi } from 'tweakpane';
+import type { DevTools } from './devTools';
 import { type FileData, type FileHandle, FileSystemController } from './FileSystemController';
 import { SpineLayout } from './SpineLayout';
 
@@ -19,16 +21,26 @@ declare global {
 
 export class SpineLayoutEditor {
   private fs: FileSystemController;
+  private availableAnimations!: FolderApi;
+  private _onClose: (() => void)[] = [];
 
-  constructor(private layout: SpineLayout) {
+  constructor(private layout: SpineLayout, private devTools: DevTools) {
     this.fs = new FileSystemController();
+    this.init().then(() => {
+      this.addUI();
+    });
+  }
+
+  onClose(cb: () => void) {
+    this._onClose.push(cb);
   }
 
   async init() {
     await this.fs.init();
+
     this.fs.watch((files: FileHandle[]) => {
       this.onFilesChanged(files);
-    });
+    }, ['atlas', 'json', 'png', 'skel']);
   }
 
   private async onFilesChanged(files: FileHandle[]) {
@@ -36,13 +48,29 @@ export class SpineLayoutEditor {
       return;
     }
 
-    // console.log('Files changed:', files);
+    console.log('Files changed:', files.map((file) => file.name));
 
-    this.loadSpine(files);
+    await this.loadSpine(files);
+
+    this.layout?.getAnimations().forEach((animation) => {
+      // this.animationsFolder.children.forEach((child) => {
+      //     child.dispose();
+      // });
+      this.animationsFolder.addButton({ title: animation }).on('click', async () => {
+        console.log(`start: ${animation}`);
+
+        await this.layout?.play(animation);
+
+        console.log(`end: ${animation}`);
+      });
+    });
   }
 
   close() {
+    this._onClose.forEach((cb) => cb());
     this.fs.close();
+    this.animationsFolder.dispose();
+    this.layout?.reset();
   }
 
   get initialised(): boolean {
@@ -50,76 +78,124 @@ export class SpineLayoutEditor {
   }
 
   private async loadSpine(files: FileHandle[]) {
-    console.log('Loading spine files:', files);
+    const spineFiles = this.convertToSpinesMap(files);
 
-    const spinesData: Map<
-      string,
-      {
-        image?: string;
-        skel?: Uint8Array | ArrayBuffer;
-        atlas?: string;
-        skelType?: 'JSON' | 'skel';
-      }
-    > = new Map();
+    for (const spineFileData of spineFiles) {
+      if (!this.isFullSetOfSpineFiles(spineFileData[1])) {
+        console.warn(`Incomplete set of spine files:`, spineFileData);
 
-    for await (const fileData of files) {
-      const file = await fileData.getFile();
-      const reader = new FileReader();
-
-      if (file.type.match(/image/)) {
-        reader.readAsDataURL(file);
-      } else if (/^.+\.skel$/.test(file.name)) {
-        reader.readAsArrayBuffer(file);
-      } else {
-        reader.readAsText(file);
+        continue;
       }
 
-      reader.onload = async (event) => {
-        const name = this.stripFileName(file.name);
-        const spineData = spinesData.get(name) || {};
+      const skelFile = await spineFileData[1].skel?.getFile();
+      const atlasFile = await spineFileData[1].atlas?.getFile();
+      const textureFilesPromises = (spineFileData[1].png ?? []).map(async (fileHandle) => await fileHandle.getFile());
+      const textureFiles = await Promise.all(textureFilesPromises);
 
-        if (file.type.match(/image/)) {
-          spinesData.set(name, {
-            ...spineData,
-            image: event.target!.result as string,
-          });
-        } else if (file.type === 'application/json') {
-          spinesData.set(name, {
-            ...spineData,
-            skel: JSON.parse(event.target!.result as string),
-            skelType: 'JSON',
-          });
-        } else if (/^.+\.skel$/.test(file.name)) {
-          spinesData.set(name, {
-            ...spineData,
-            skel: event.target!.result as Uint8Array,
-            skelType: 'skel',
-          });
-        } else if (/^.+\.atlas$/.test(file.name)) {
-          spinesData.set(name, {
-            ...spineData,
-            atlas: event.target!.result as string,
-          });
+      if (!skelFile || !atlasFile) {
+        console.warn(`Incomplete set of spine files:`, spineFileData);
+        continue;
+      }
+
+      if (skelFile && atlasFile && textureFiles.length > 0) {
+        const spineData = await this.layout.loadSpineFiles({
+          skelFile,
+          atlasFile,
+          textureFiles
+        });
+
+        if (spineData) {
+          this.layout.createInstanceFromData(spineData);
         }
-
-        const spine = spinesData.get(name);
-
-        if (spine?.image && spine?.skel && spine?.atlas) {
-          console.log('Creating spine instance:', spine);
-
-          this.layout.createInstanceFromData(name, spine.skel, spine.atlas, spine.image, spine.skelType === 'skel');
-        }
-      };
-    }
+      }
+    };
   }
 
-  private stripFileName(fileName: string): string {
-    const parts = fileName.split('.');
+  private isFullSetOfSpineFiles(files: SpineFilesSet): boolean {
+    const hasRequired = files.atlas !== null && files.png !== null;
+    const hasOptional = files.skel !== null;
 
-    if (parts.length === 2) {
-      return parts[0];
-    } else {
-      return fileName;
+    return hasRequired && hasOptional;
+  }
+
+  private convertToSpinesMap(files: FileHandle[]): SpineFilesData {
+    const fileMap: SpineFilesData = new Map();
+
+    files.forEach((file) => {
+      const [name, ext] = file.name.split('.');
+
+      if (ext === 'skel' || ext === 'json') {
+        if (!fileMap.has(name)) {
+          fileMap.set(name, { skel: null, atlas: null, png: [] });
+        }
+
+        const currentEntry = fileMap.get(name);
+
+        currentEntry!.skel = file;
+      } else if (ext === 'atlas') {
+        if (!fileMap.has(name)) {
+          fileMap.set(name, { skel: null, atlas: null, png: [] });
+        }
+
+        const currentEntry = fileMap.get(name);
+
+        currentEntry!.atlas = file;
+      } else if (ext === 'png') {
+        const baseName = name.replace(/_\d+$/, '');
+
+        if (!fileMap.has(baseName)) {
+          fileMap.set(baseName, { skel: null, atlas: null, png: [] });
+        }
+
+        const currentEntry = fileMap.get(baseName);
+
+        currentEntry!.png?.push(file);
+      }
+    });
+
+    return fileMap;
+  }
+
+  private get animationsFolder(): FolderApi {
+    if (!this.availableAnimations) {
+      this.availableAnimations = this.devTools.addFolder({
+        title: 'Animations',
+        expanded: true,
+      });
+    }
+
+    return this.availableAnimations;
+  }
+
+  private async addUI() {
+    const button = this.devTools.addFolder({
+      title: 'Editor',
+      expanded: true,
+    }).addButton({
+      title: 'Open layout',
+    }).on('click', async () => {
+      if (this.initialised) {
+        await this.close();
+      } else {
+        await this.init();
+      }
+
+      setTimeout(() => {
+        button.title = this.initialised ? 'Close layout' : 'Open layout';
+      }, 100);
+    });
+
+    if (this.initialised) {
+      setTimeout(() => {
+        button.title = 'Close layout';
+      }, 100);
     }
   }
 }
+
+type SpineFilesData = Map<string, SpineFilesSet>;
+type SpineFilesSet = {
+  skel: FileHandle | null;
+  atlas: FileHandle | null;
+  png: FileHandle[] | null;
+};
