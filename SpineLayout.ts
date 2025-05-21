@@ -12,7 +12,6 @@ import {
   type AssetsManifest,
   Container,
   Text,
-  Texture,
   // Texture,
   Ticker,
   TilingSprite,
@@ -46,21 +45,9 @@ type SpineLayoutOptions = {
   maxWidth?: number | string;
 };
 
-export type SpineData = {
-  atlas: string;
-  skel: string;
-  textures: { [key: string]: Texture };
-};
-
-export type SpineInstanceData = {
-  skeleton: SkeletonData;
-  atlasText: string,
-  textures: Record<string, Texture>
-}
 export class SpineLayout extends Container {
   private spines: Map<SpineID, Spine> = new Map();
   private animations: Map<SpineID, AnimationsRegistry> = new Map();
-  private activeAnimations: string[] = [];
   private texts: Map<SpineID, Text> = new Map();
   private tiles: Map<SpineID, TilingSprite> = new Map();
 
@@ -72,65 +59,62 @@ export class SpineLayout extends Container {
       this.on('childAdded', () => this.resize());
     }
   }
-  /**
-     * Loads spine files and prepares them for rendering.
-     * @param files - Accepted files, including skeleton, atlas, and texture files.
-     * @param files.skelFile - Skeleton file (.skel or .json)
-     * @param files.atlasFile - Atlas file (.atlas)
-     * @param files.textureFiles - Texture files (.png)
-     * @throws Will throw an error if the files are not valid or if loading fails.
-     * @returns - SpineInstanceData
-     */
-  async loadSpineFiles(files: {
-    skelFile: File,
-    atlasFile: File,
-    textureFiles: File[]
-  }): Promise<SpineInstanceData | null> {
-    const { skelFile, atlasFile, textureFiles } = files;
 
-    try {
-      // Load textures
-      const assetBundle: Record<string, any> = {};
+  async createInstanceFromData(
+    spineID: string,
+    skeleton: Uint8Array | ArrayBuffer,
+    atlas: string,
+    _image: string,
+    isSkel: boolean
+  ) {
+    console.log(`create spine`, {
+      skeleton,
+      atlas,
+      spineID,
+      // animations: spine.state.data.skeletonData.animations.map((a) => a.name)
+    });
 
-      await Promise.all(textureFiles.map(async (file) => {
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
+    // const texture: Texture = await Assets.load(image);
+    const spineAtlas = new TextureAtlas(atlas);
 
-        assetBundle[file.name] = {
-          src: base64,
-          data: { type: file.type }
-        };
-      }));
+    Assets.cache.set(`${spineID}_atlas`, spineAtlas);
 
-      // Add and load bundle
-      Assets.addBundle('spineAssets', assetBundle);
-      const textures = await Assets.loadBundle('spineAssets');
+    let skeletonData: SkeletonData;
 
-      let skeleton;
-
-      if (skelFile.type === 'application/json') {
-        const jsonText = await this.readFileAsText(skelFile);
-        skeleton = JSON.parse(jsonText);
-      } else if (skelFile) {
-        skeleton = await this.readFileAsArrayBuffer(skelFile);
-      } else {
-        throw new Error('No skeleton file (.skel or .json) found');
-      }
-
-      if (!atlasFile) {
-        throw new Error('No atlas file found');
-      }
-      const atlasText = await this.readFileAsText(atlasFile);
-
-      return { skeleton, atlasText, textures };
-    } catch (error) {
-      console.error('Error loading Spine files:', error);
+    if (isSkel) {
+      const spineBinaryParser = new SkeletonBinary(new AtlasAttachmentLoader(spineAtlas));
+      skeletonData = spineBinaryParser.readSkeletonData(new Uint8Array(skeleton));
+      Assets.cache.set(`${spineID}_skel`, skeletonData);
+    } else {
+      const spineJsonParser = new SkeletonJson(new AtlasAttachmentLoader(spineAtlas));
+      skeletonData = spineJsonParser.readSkeletonData(skeleton);
+      Assets.cache.set(`${spineID}_skel`, skeletonData);
     }
 
-    return null;
+    // const spine = Spine.from({
+    //     skeleton: `${spineID}_skel`,
+    //     atlas: `${spineID}_atlas`,
+    // });
+
+    // this.addChild(spine);
+
+    // console.log(`!!! createInstance`, {
+    //     texture,
+    //     skeletonData,
+    //     spineAtlas,
+    //     spine
+    // });
+
+    // this.createInstance(skeletonData, spineAtlas);
+    // Inject rendererObject manually
+    // for (const page of spineAtlas.pages) {
+    //     // Manually assign Pixi baseTexture to Spine rendererObject
+    //     page.rendererObject = texture.baseTexture;
+
+    //     // These must also be set
+    //     page.width = texture.baseTexture.width;
+    //     page.height = texture.baseTexture.height;
+    // }
   }
 
   /**
@@ -143,10 +127,7 @@ export class SpineLayout extends Container {
     }
 
     this.getSpinesFromManifest(manifest).forEach((spine) => {
-      const spineInstance = Spine.from({ skeleton: spine.skel, atlas: spine.atlas, scale: 1 });
-      const spineID = spine.atlas.replace(/\.[^.]+$/, '');
-
-      this.addSpineInstance(spineID, spineInstance);
+      this.createInstance(spine.skel, spine.atlas);
     });
 
     this.attachBones();
@@ -173,16 +154,7 @@ export class SpineLayout extends Container {
           console.log(`▶️ ${spineID}(${animation})`);
         }
 
-        const trackID = this.activeAnimations.length + 1;
-        const promise = this.playInstanceAnimation(spineID, animation, trackID);
-
-        promise.then(() => {
-          this.activeAnimations = this.activeAnimations.filter((a) => a !== animation);
-        });
-
-        animationsPromises.push(promise);
-
-        this.activeAnimations.push(animation);
+        animationsPromises.push(this.playInstanceAnimation(spineID, animation));
 
         // TODO: add more modificators
         // modificators.forEach((mod) => {
@@ -200,36 +172,12 @@ export class SpineLayout extends Container {
     return Promise.all(animationsPromises);
   }
 
-  async playState(state: string) {
-    const animations = this.getAnimations();
-    const animationsToPlay: Map<SpineID, string[]> = new Map();
-
-    animations.forEach((animationName) => {
-      if (animationName.startsWith(state)) {
-        this.animations.get(animationName)?.forEach((animations, spineID) => {
-          animations.forEach(async (animation) => {
-            const animations = animationsToPlay.get(spineID) ?? [];
-
-            animations.push(animation);
-            animationsToPlay.set(spineID, animations);
-          });
-        });
-      }
-    });
-
-    animationsToPlay.forEach((animations) => {
-      animations.forEach((animation) => {
-        this.play(this.stripModificators(animation));
-      });
-    });
-  }
-
   /**
    * Play spine animation by ID.
    * @param spineID - spine ID to play the animation on
    * @param animation - animation name to play
    */
-  async playInstanceAnimation(spineID: string, animation: string, trackID = 0) {
+  async playInstanceAnimation(spineID: string, animation: string) {
     const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
     const spine = this.spines.get(spineID)?.state;
 
@@ -242,13 +190,7 @@ export class SpineLayout extends Container {
       return Promise.resolve();
     }
 
-    console.log(`!!! setAnimation`, {
-      trackID,
-      animation,
-      loop: mod.includes(modificators.loop),
-    });
-
-    spine.setAnimation(trackID, animation, mod.includes(modificators.loop));
+    spine.setAnimation(0, animation, mod.includes(modificators.loop));
 
     return new Promise<void>((resolve) => {
       this.spines.get(spineID)?.state.addListener({
@@ -295,37 +237,25 @@ export class SpineLayout extends Container {
     Ticker.shared.remove(this.moveTiles, this);
   }
 
-  reset() {
-    this.spines.forEach((spine) => {
-      spine.destroy();
-    });
-
-    this.spines.clear();
-    this.animations.clear();
-    this.activeAnimations = [];
-    this.texts.clear();
-    this.tiles.clear();
-
-    this.removeChildren();
-  }
-
   /**
-   * Add a spine instance to layout.
-   * @param spineID - ID of the spine instance
-   * @param spine - spine instance to add
+   * Create a spine instance by skeleton and atlas.
+   * @param skeleton - skeleton asset name
+   * @param atlas - atlas asset name
    */
-  private addSpineInstance(spineID: string, spine: Spine) {
-    if (this.spines.has(spineID)) {
-      this.spines.get(spineID)?.destroy();
-      this.spines.delete(spineID);
-    }
+  private createInstance(skeleton: string, atlas: string) {
+    const spine = Spine.from({ skeleton, atlas, scale: 1 });
+    const spineID = atlas.replace(/\.atlas/, '');
 
     this.spines.set(spineID, spine);
-    const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
 
     if (this.options?.debug) {
-      console.log(`➕ spine ${spineID}`, animations);
+      console.log(
+        spineID,
+        spine.state.data.skeletonData.animations.map((a) => a.name)
+      );
     }
+
+    const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
 
     animations.forEach((animation) => {
       const noModAnimation = this.stripModificators(animation);
@@ -488,9 +418,7 @@ export class SpineLayout extends Container {
           spinesMap.push({
             atlas,
             skel,
-            textures: {
-              [texture]: Texture.from(texture),
-            },
+            texture,
           });
         }
       });
@@ -672,22 +600,10 @@ export class SpineLayout extends Container {
       }
     });
   }
-
-  private readFileAsText(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsText(file);
-    });
-  }
-
-  private readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as ArrayBuffer);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsArrayBuffer(file);
-    });
-  }
 }
+
+type SpineData = {
+  atlas: string;
+  skel: string;
+  texture: string;
+};
