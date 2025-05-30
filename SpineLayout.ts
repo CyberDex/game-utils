@@ -1,27 +1,17 @@
 import {
   AtlasAttachmentLoader,
-  SkeletonBinary,
   SkeletonData,
   SkeletonJson,
   SlotData,
   Spine,
+  SpineTexture,
   TextureAtlas,
 } from '@esotericsoftware/spine-pixi-v8';
-import {
-  Assets,
-  type AssetsManifest,
-  Container,
-  Text,
-  // Texture,
-  Ticker,
-  TilingSprite,
-  type UnresolvedAsset,
-} from 'pixi.js';
+import { type AssetsManifest, Container, Text, Texture, TilingSprite, type UnresolvedAsset } from 'pixi.js';
 
 const slotPointers = {
   spine: 'spine_',
   text: 'text_',
-  tile: ['tileH_', 'tileV_', 'tileVH_', 'tileHV_'],
 };
 
 const modificators = {
@@ -45,11 +35,19 @@ type SpineLayoutOptions = {
   maxWidth?: number | string;
 };
 
+export type SpineInstanceData = {
+  skeleton: SkeletonData;
+  atlasText: string;
+  textures: Record<string, Texture>;
+};
 export class SpineLayout extends Container {
   private spines: Map<SpineID, Spine> = new Map();
   private animations: Map<SpineID, AnimationsRegistry> = new Map();
+  private statesAnimations: Map<string, string[]> = new Map();
   private texts: Map<SpineID, Text> = new Map();
   private tiles: Map<SpineID, TilingSprite> = new Map();
+  private activeStates: Map<string, Promise<void>> = new Map();
+  private onInitCallbacks: (() => void)[] = [];
 
   constructor(private options?: SpineLayoutOptions) {
     super();
@@ -60,61 +58,56 @@ export class SpineLayout extends Container {
     }
   }
 
-  async createInstanceFromData(
-    spineID: string,
-    skeleton: Uint8Array | ArrayBuffer,
-    atlas: string,
-    _image: string,
-    isSkel: boolean
-  ) {
-    console.log(`create spine`, {
-      skeleton,
-      atlas,
-      spineID,
-      // animations: spine.state.data.skeletonData.animations.map((a) => a.name)
-    });
+  /**
+   * Creates a Spine instance from the provided data.
+   * @param data - SpineInstanceData
+   * @param data.skeleton - Skeleton data
+   * @param data.atlasText - Atlas text
+   * @param data.textures - Textures
+   * @throws Will throw an error if the texture is missing for a page in the atlas.
+   */
+  createInstanceFromData(data: SpineInstanceData) {
+    // Create atlas
+    const spineAtlas = new TextureAtlas(data.atlasText);
 
-    // const texture: Texture = await Assets.load(image);
-    const spineAtlas = new TextureAtlas(atlas);
+    // Process each page in the atlas
+    for (const page of spineAtlas.pages) {
+      const pageName = page.name;
+      const texture = data.textures[pageName];
 
-    Assets.cache.set(`${spineID}_atlas`, spineAtlas);
+      if (!texture) {
+        console.error(`Missing texture for page: ${pageName}`);
+        throw new Error(`Missing texture for page: ${pageName}`);
+      }
 
-    let skeletonData: SkeletonData;
+      // Create SpineTexture from the PIXI Texture
+      const spineTexture = SpineTexture.from(texture.source);
 
-    if (isSkel) {
-      const spineBinaryParser = new SkeletonBinary(new AtlasAttachmentLoader(spineAtlas));
-      skeletonData = spineBinaryParser.readSkeletonData(new Uint8Array(skeleton));
-      Assets.cache.set(`${spineID}_skel`, skeletonData);
-    } else {
-      const spineJsonParser = new SkeletonJson(new AtlasAttachmentLoader(spineAtlas));
-      skeletonData = spineJsonParser.readSkeletonData(skeleton);
-      Assets.cache.set(`${spineID}_skel`, skeletonData);
+      // Set the texture for the page
+      page.setTexture(spineTexture);
+
+      // Handle PMA (Premultiplied Alpha) if needed
+      // if (page.pma) {
+      //     texture.alphaMode = ALPHA_MODES.PREMULTIPLIED_ALPHA;
+      // } else {
+      //     texture.alphaMode = ALPHA_MODES.PREMULTIPLY_ON_UPLOAD;
+      // }
     }
 
-    // const spine = Spine.from({
-    //     skeleton: `${spineID}_skel`,
-    //     atlas: `${spineID}_atlas`,
-    // });
+    // Create attachment loader
+    const atlasLoader = new AtlasAttachmentLoader(spineAtlas);
 
-    // this.addChild(spine);
+    // Create skeleton data
+    const skeletonJson = new SkeletonJson(atlasLoader);
+    const skeletonData = skeletonJson.readSkeletonData(data.skeleton);
 
-    // console.log(`!!! createInstance`, {
-    //     texture,
-    //     skeletonData,
-    //     spineAtlas,
-    //     spine
-    // });
+    const spineInstance = new Spine(skeletonData);
+    const spineID = data.atlasText.split('.')[0];
 
-    // this.createInstance(skeletonData, spineAtlas);
-    // Inject rendererObject manually
-    // for (const page of spineAtlas.pages) {
-    //     // Manually assign Pixi baseTexture to Spine rendererObject
-    //     page.rendererObject = texture.baseTexture;
+    this.addSpineInstance(spineID, spineInstance);
 
-    //     // These must also be set
-    //     page.width = texture.baseTexture.width;
-    //     page.height = texture.baseTexture.height;
-    // }
+    this.attachBones();
+    this.attachTexts();
   }
 
   /**
@@ -127,11 +120,42 @@ export class SpineLayout extends Container {
     }
 
     this.getSpinesFromManifest(manifest).forEach((spine) => {
-      this.createInstance(spine.skel, spine.atlas);
+      const spineInstance = Spine.from({ skeleton: spine.skel, atlas: spine.atlas, scale: 1 });
+      const spineID = spine.atlas.replace(/\.[^.]+$/, '');
+
+      this.addSpineInstance(spineID, spineInstance);
     });
 
     this.attachBones();
     this.attachTexts();
+  }
+
+  /**
+   * Tryes to play an animations based on the state name of the animations for each of the created spine instances.
+   * Will only play the animation state if the animation state name is found in the spine instance.
+   * @param stateName The name of the animation to play
+   */
+  async playState(stateName: string) {
+    const animationsPromises: Promise<void>[] = [];
+    const stateAnimations = this.statesAnimations.get(stateName);
+
+    console.log(`State ${stateName}`, { stateAnimations, animations: this.animations });
+
+    stateAnimations?.forEach((animation) => {
+      this.animations.get(animation)?.forEach((animations, spineID) => {
+        animations.forEach(async (animation) => {
+          const promise = this.playInstanceAnimation(spineID, animation, animationsPromises.length + 1);
+
+          animationsPromises.push(promise);
+
+          this.activeStates.set(stateName, promise);
+        });
+      });
+    });
+
+    await Promise.all(animationsPromises);
+
+    this.activeStates.delete(stateName);
   }
 
   /**
@@ -150,11 +174,9 @@ export class SpineLayout extends Container {
         //     }
         // });
 
-        if (this.options?.debug) {
-          console.log(`▶️ ${spineID}(${animation})`);
-        }
+        const promise = this.playInstanceAnimation(spineID, animation);
 
-        animationsPromises.push(this.playInstanceAnimation(spineID, animation));
+        animationsPromises.push(promise);
 
         // TODO: add more modificators
         // modificators.forEach((mod) => {
@@ -173,11 +195,20 @@ export class SpineLayout extends Container {
   }
 
   /**
+   * Stop all animations.
+   */
+  stopAll() {
+    this.spines.forEach((spine) => {
+      spine.state.clearTrack(0);
+    });
+  }
+
+  /**
    * Play spine animation by ID.
    * @param spineID - spine ID to play the animation on
    * @param animation - animation name to play
    */
-  async playInstanceAnimation(spineID: string, animation: string) {
+  async playInstanceAnimation(spineID: string, animation: string, trackID = 0) {
     const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
     const spine = this.spines.get(spineID)?.state;
 
@@ -190,7 +221,13 @@ export class SpineLayout extends Container {
       return Promise.resolve();
     }
 
-    spine.setAnimation(0, animation, mod.includes(modificators.loop));
+    spine.setAnimation(trackID, animation, mod.includes(modificators.loop));
+
+    if (this.options?.debug) {
+      const track = trackID > 0 ? ` track ${trackID}` : '';
+
+      console.log(`▶️ ${spineID}(${animation})${track}`);
+    }
 
     return new Promise<void>((resolve) => {
       this.spines.get(spineID)?.state.addListener({
@@ -205,6 +242,14 @@ export class SpineLayout extends Container {
    */
   getAnimations(): string[] {
     return Array.from(this.animations.keys());
+  }
+
+  /**
+   * Get all available animations from all spine instances.
+   * @returns Array of all available animations
+   */
+  getAnimationsStates(): string[] {
+    return Array.from(this.statesAnimations.keys());
   }
 
   /**
@@ -224,38 +269,74 @@ export class SpineLayout extends Container {
   }
 
   /**
-   * Start moving tiles.
+   * Reset layout, destroy all spines, animations, texts, and tiles.
+   * This will remove all children from the layout.
    */
-  startTiles() {
-    Ticker.shared.add(this.moveTiles, this);
+  reset() {
+    this.spines.forEach((spine) => {
+      spine.destroy();
+    });
+
+    this.spines.clear();
+    this.animations.clear();
+    this.texts.clear();
+    this.tiles.clear();
+
+    this.removeChildren();
+  }
+
+  getSpine(spineID: string): Spine | undefined {
+    return this.spines.get(spineID);
   }
 
   /**
-   * Stop moving tiles.
+   * Add callback to be called when the layout is initialized.
+   * This is useful for waiting until all spines are created and attached.
+   * This will be called after all spines are created and attached.
+   * @param {Function} callback - Callback to be called when the layout is initialized.
    */
-  stopTiles() {
-    Ticker.shared.remove(this.moveTiles, this);
+  onInit(callback: () => void) {
+    this.onInitCallbacks.push(callback);
   }
 
   /**
-   * Create a spine instance by skeleton and atlas.
-   * @param skeleton - skeleton asset name
-   * @param atlas - atlas asset name
+   * Play a queue of animations.
+   * This will stop all currently playing animations and play the animations in the queue one by one.
+   * @param queue - Array of animation names to play
    */
-  private createInstance(skeleton: string, atlas: string) {
-    const spine = Spine.from({ skeleton, atlas, scale: 1 });
-    const spineID = atlas.replace(/\.atlas/, '');
+  async playAnimationsQueue(queue: string[]) {
+    console.log('Play animations queue:', queue);
 
-    this.spines.set(spineID, spine);
+    this.stopAll();
 
-    if (this.options?.debug) {
-      console.log(
-        spineID,
-        spine.state.data.skeletonData.animations.map((a) => a.name)
-      );
+    for (const animation of queue) {
+      if (animation.startsWith('state_')) {
+        const stateName = this.getStateName(animation);
+
+        await this.playState(stateName);
+      } else {
+        await this.play(animation);
+      }
+    }
+  }
+
+  /**
+   * Add a spine instance to layout.
+   * @param spineID - ID of the spine instance
+   * @param spine - spine instance to add
+   */
+  private addSpineInstance(spineID: string, spine: Spine) {
+    if (this.spines.has(spineID)) {
+      this.spines.get(spineID)?.destroy();
+      this.spines.delete(spineID);
     }
 
+    this.spines.set(spineID, spine);
     const animations = spine.state.data.skeletonData.animations.map((a) => a.name);
+
+    if (this.options?.debug) {
+      console.log(`➕ spine ${spineID}`, animations);
+    }
 
     animations.forEach((animation) => {
       const noModAnimation = this.stripModificators(animation);
@@ -266,12 +347,28 @@ export class SpineLayout extends Container {
         this.animations.set(noModAnimation, animationsRegistry);
       }
 
+      if (animation.startsWith('state_')) {
+        const stateName = this.getStateName(noModAnimation);
+        const stateAnimations = this.statesAnimations.get(stateName) ?? [];
+
+        if (!stateAnimations.includes(noModAnimation)) {
+          stateAnimations.push(noModAnimation);
+          this.statesAnimations.set(stateName, stateAnimations);
+        }
+
+        this.statesAnimations.set(stateName, stateAnimations);
+      }
+
       const animations: string[] = this.animations.get(noModAnimation)?.get(spineID) ?? [];
 
       animations.push(animation);
 
       this.animations.get(noModAnimation)?.set(spineID, animations);
     });
+  }
+
+  private getStateName(animationName: string) {
+    return `state_${animationName.split('_')[1]}`;
   }
 
   private isAnimationPlaying(spineID: string, animation: string) {
@@ -311,12 +408,6 @@ export class SpineLayout extends Container {
         if (slot.name.startsWith(slotPointers.spine)) {
           this.attachBone(slot, spine, slot.name.replace(slotPointers.spine, ''), id);
         }
-
-        slotPointers.tile.forEach((tile) => {
-          if (slot.name.startsWith(tile)) {
-            this.turnAttachmentIntoTile(slot, spine);
-          }
-        });
       });
     });
 
@@ -339,25 +430,25 @@ export class SpineLayout extends Container {
     }
   }
 
-  private turnAttachmentIntoTile(slot: SlotData, spine: Spine) {
-    if (!slot.attachmentName) {
-      console.error(`Attachment name is empty for slot ${slot.name}`);
-      return;
-    }
+  // private turnAttachmentIntoTile(slot: SlotData, spine: Spine) {
+  //   if (!slot.attachmentName) {
+  //     console.error(`Attachment name is empty for slot ${slot.name}`);
+  //     return;
+  //   }
 
-    try {
-      const tile = TilingSprite.from(slot.attachmentName);
+  //   try {
+  //     const tile = TilingSprite.from(slot.attachmentName);
 
-      this.tiles.set(slot.name, tile);
-      spine.addSlotObject(slot.name, tile);
+  //     this.tiles.set(slot.name, tile);
+  //     spine.addSlotObject(slot.name, tile);
 
-      if (this.options?.debug) {
-        console.log(`Tile ${slot.name} -> ${slot.attachmentName}`);
-      }
-    } catch (error) {
-      console.error(`Error creating tile from attachment ${slot.attachmentName}:`, error);
-    }
-  }
+  //     if (this.options?.debug) {
+  //       console.log(`Tile ${slot.name} -> ${slot.attachmentName}`);
+  //     }
+  //   } catch (error) {
+  //     console.error(`Error creating tile from attachment ${slot.attachmentName}:`, error);
+  //   }
+  // }
 
   private attachTexts() {
     this.spines.forEach((spine) => {
@@ -441,37 +532,37 @@ export class SpineLayout extends Container {
     }
   }
 
-  private moveTiles() {
-    this.tiles.forEach((tile, tileID) => {
-      const moveType = tileID.split('_')[0];
-      const speed = Number(tileID.split(modificators.speed)[1]);
-      const speedX = Number(tileID.split(modificators.speedX)[1]);
-      const speedY = Number(tileID.split(modificators.speedY)[1]);
+  // private moveTiles() {
+  //   this.tiles.forEach((tile, tileID) => {
+  //     const moveType = tileID.split('_')[0];
+  //     const speed = Number(tileID.split(modificators.speed)[1]);
+  //     const speedX = Number(tileID.split(modificators.speedX)[1]);
+  //     const speedY = Number(tileID.split(modificators.speedY)[1]);
 
-      if (!tile) {
-        return;
-      }
+  //     if (!tile) {
+  //       return;
+  //     }
 
-      switch (moveType) {
-        case 'tileH':
-          tile.tilePosition.x += speedX ? speedX : speed;
-          break;
-        case 'tileV':
-          tile.tilePosition.y += speedY ? speedY : speed;
-          break;
-        case 'tileVH':
-        case 'tileHV':
-          if (speed || speedX) {
-            tile.tilePosition.x += speedX ? speedX : speed;
-          }
+  //     switch (moveType) {
+  //       case 'tileH':
+  //         tile.tilePosition.x += speedX ? speedX : speed;
+  //         break;
+  //       case 'tileV':
+  //         tile.tilePosition.y += speedY ? speedY : speed;
+  //         break;
+  //       case 'tileVH':
+  //       case 'tileHV':
+  //         if (speed || speedX) {
+  //           tile.tilePosition.x += speedX ? speedX : speed;
+  //         }
 
-          if (speed || speedY) {
-            tile.tilePosition.y += speedY ? speedY : speed;
-          }
-          break;
-      }
-    });
-  }
+  //         if (speed || speedY) {
+  //           tile.tilePosition.y += speedY ? speedY : speed;
+  //         }
+  //         break;
+  //     }
+  //   });
+  // }
 
   private resize() {
     this.fitVertical();
