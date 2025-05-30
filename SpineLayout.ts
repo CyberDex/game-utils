@@ -33,6 +33,7 @@ type SpineLayoutOptions = {
   minWidth?: number | string;
   maxHeight?: number | string;
   maxWidth?: number | string;
+  manifest?: AssetsManifest;
 };
 
 export type SpineInstanceData = {
@@ -55,6 +56,10 @@ export class SpineLayout extends Container {
     if (options?.maxHeight || options?.minHeight || options?.maxWidth || options?.minWidth) {
       window.addEventListener('resize', () => this.resize());
       this.on('childAdded', () => this.resize());
+    }
+
+    if (options?.manifest) {
+      this.createInstancesFromManifest(options.manifest);
     }
   }
 
