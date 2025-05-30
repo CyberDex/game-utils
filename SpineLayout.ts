@@ -47,7 +47,6 @@ export class SpineLayout extends Container {
   private statesAnimations: Map<string, string[]> = new Map();
   private texts: Map<SpineID, Text> = new Map();
   private tiles: Map<SpineID, TilingSprite> = new Map();
-  private activeStates: Map<string, Promise<void>> = new Map();
   private onInitCallbacks: (() => void)[] = [];
 
   constructor(private options?: SpineLayoutOptions) {
@@ -143,6 +142,7 @@ export class SpineLayout extends Container {
   async playState(stateName: string) {
     const animationsPromises: Promise<void>[] = [];
     const stateAnimations = this.statesAnimations.get(stateName);
+    const activeStates: Map<string, Promise<void>> = new Map();
 
     console.log(`State ${stateName}`, { stateAnimations, animations: this.animations });
 
@@ -153,14 +153,14 @@ export class SpineLayout extends Container {
 
           animationsPromises.push(promise);
 
-          this.activeStates.set(stateName, promise);
+          activeStates.set(stateName, promise);
         });
       });
     });
 
     await Promise.all(animationsPromises);
 
-    this.activeStates.delete(stateName);
+    activeStates.delete(stateName);
   }
 
   /**
