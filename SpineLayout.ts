@@ -189,7 +189,7 @@ export class SpineLayout extends Container {
   stopAll() {
     this.animations.forEach((_, spineID) => {
       const spine = this.spines.get(spineID)?.state;
-      debugger;
+
       if (spine) {
         spine.clearTracks();
       }
