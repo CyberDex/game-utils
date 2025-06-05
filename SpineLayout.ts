@@ -187,14 +187,13 @@ export class SpineLayout extends Container {
    * It will also stop all animations for each spine instance.
    */
   stopAll() {
-    this.animations.forEach((_, spineID) => {
-      const spine = this.spines.get(spineID)?.state;
+    this.spines.forEach((spine, spineID) => {
+      spine.state.clearTracks();
 
-      if (spine) {
-        spine.clearTracks();
-      }
+      console.log(`⏹️ Stop all animations for spine ${spineID}`);
 
       this.activeAnimations.delete(spineID);
+      this.loopingAnimations.delete(spineID);
     });
   }
 
