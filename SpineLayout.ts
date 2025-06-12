@@ -316,7 +316,7 @@ export class SpineLayout extends Container {
   }
 
   private removeActiveAnimation(spineID: string, animation: string) {
-    let activeAnimations = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    const activeAnimations = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     if (activeAnimations.has(animation)) {
       activeAnimations.delete(animation);
@@ -325,7 +325,7 @@ export class SpineLayout extends Container {
   }
 
   private addActiveAnimation(spineID: string, animation: string, trackID: number) {
-    let activeAnimationsTracks = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    const activeAnimationsTracks = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     activeAnimationsTracks.set(animation, trackID);
 
@@ -333,7 +333,7 @@ export class SpineLayout extends Container {
   }
 
   private addLoopingAnimation(spineID: string, animation: string, trackID: number) {
-    let loopingAnimationsTracks = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    const loopingAnimationsTracks = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     loopingAnimationsTracks.set(animation, trackID);
 
@@ -341,7 +341,7 @@ export class SpineLayout extends Container {
   }
 
   private removeLoopingAnimation(spineID: string, animation: string) {
-    let loopingAnimations = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    const loopingAnimations = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     if (loopingAnimations.has(animation)) {
       loopingAnimations.delete(animation);
