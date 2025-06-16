@@ -707,8 +707,8 @@ export class SpineLayout extends Container {
   private getAssetByType(bundle: UnresolvedAsset, type: string): string[] | undefined {
     if (Array.isArray(bundle.assets)) {
       const assets = bundle.assets
-        .filter(({ alias }) => alias[alias.length - 1].endsWith(type))
-        .map(({ alias }) => alias[alias.length - 1]);
+        .filter(({ alias }) => alias[0].endsWith(type))
+        .map(({ alias }) => alias[0].split('/').pop());
 
       return assets;
     } else {
