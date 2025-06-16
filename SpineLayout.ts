@@ -188,9 +188,10 @@ export class SpineLayout extends Container {
    */
   stopAll() {
     this.spines.forEach((spine, spineID) => {
-      spine.state.clearTracks();
-
-      console.log(`⏹️ Stop all animations for spine ${spineID}`);
+      if (spine?.state) {
+        spine.state.clearTracks();
+        spine.skeleton.setToSetupPose();
+      }
 
       this.activeAnimations.delete(spineID);
       this.loopingAnimations.delete(spineID);
@@ -198,16 +199,35 @@ export class SpineLayout extends Container {
   }
 
   /**
+   * Stop all animations for a specific spine instance.
+   * @param spineID ID of the spine instance to stop all animations for.
+   * This will clear all active animations and looping animations for the spine instance.
+   * It will also stop all animations for the spine instance.
+   */
+  stopAllBySpineID(spineID: string) {
+    const spine = this.spines.get(spineID);
+
+    if (!spine) {
+      return;
+    }
+
+    spine.state.clearTracks();
+    spine.skeleton.setToSetupPose();
+    this.activeAnimations.delete(spineID);
+    this.loopingAnimations.delete(spineID);
+  }
+
+  /**
    * Tryes to play an animation based on the name of the animation for each of the created spine instances.
    * Will only play the animation if the animation name is found in the spine instance.
    * @param animationName The name of the animation to play
    */
-  async playAnimationByName(animationName: string) {
+  async playAnimationByName(animationName: string, playSolo = false) {
     const animationsPromises: Promise<void>[] = [];
 
     this.animations.get(animationName)?.forEach((animations, spineID) => {
       animations.forEach(async (animation) => {
-        const promise = this.playInstanceAnimation(spineID, animation);
+        const promise = this.playInstanceAnimation(spineID, animation, playSolo);
 
         animationsPromises.push(promise);
       });
@@ -221,9 +241,9 @@ export class SpineLayout extends Container {
    * @param spineID - spine ID to play the animation on
    * @param animation - animation name to play
    */
-  async playInstanceAnimation(spineID: string, animation: string) {
+  async playInstanceAnimation(spineID: string, animation: string, playSolo = false) {
     const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
-    const spine = this.spines.get(spineID)?.state;
+    const spine = this.spines.get(spineID);
     let nextAnimation: string | undefined;
 
     if (mod.includes(modificators.next)) {
@@ -247,14 +267,24 @@ export class SpineLayout extends Container {
 
     const activeAnimations = this.activeAnimations.get(spineID)?.size || 0;
     const activeLoopAnimations = this.loopingAnimations.get(spineID)?.size || 0;
-    const trackID = activeAnimations + activeLoopAnimations;
+    let trackID = activeAnimations + activeLoopAnimations;
 
-    spine.setAnimation(trackID, animation, loop);
+    if (playSolo) {
+      if (this.activeAnimations.has(spineID) || this.loopingAnimations.has(spineID)) {
+        this.stopAllBySpineID(spineID);
+      }
 
-    if (loop) {
-      this.addLoopingAnimation(spineID, animation, trackID);
-    } else {
-      this.addActiveAnimation(spineID, animation, trackID);
+      trackID = 0;
+    }
+
+    spine.state.setAnimation(trackID, animation, loop);
+
+    if (!playSolo) {
+      if (loop) {
+        this.addLoopingAnimation(spineID, animation, trackID);
+      } else {
+        this.addActiveAnimation(spineID, animation, trackID);
+      }
     }
 
     if (this.options?.debug) {
@@ -280,7 +310,7 @@ export class SpineLayout extends Container {
       });
     }).then(() => {
       if (nextAnimation) {
-        this.playAnimationByName(nextAnimation);
+        this.playAnimationByName(nextAnimation, playSolo);
       }
     });
 
@@ -316,7 +346,7 @@ export class SpineLayout extends Container {
   }
 
   private removeActiveAnimation(spineID: string, animation: string) {
-    const activeAnimations = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    let activeAnimations = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     if (activeAnimations.has(animation)) {
       activeAnimations.delete(animation);
@@ -325,7 +355,7 @@ export class SpineLayout extends Container {
   }
 
   private addActiveAnimation(spineID: string, animation: string, trackID: number) {
-    const activeAnimationsTracks = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    let activeAnimationsTracks = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     activeAnimationsTracks.set(animation, trackID);
 
@@ -333,7 +363,7 @@ export class SpineLayout extends Container {
   }
 
   private addLoopingAnimation(spineID: string, animation: string, trackID: number) {
-    const loopingAnimationsTracks = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    let loopingAnimationsTracks = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     loopingAnimationsTracks.set(animation, trackID);
 
@@ -341,7 +371,7 @@ export class SpineLayout extends Container {
   }
 
   private removeLoopingAnimation(spineID: string, animation: string) {
-    const loopingAnimations = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    let loopingAnimations = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     if (loopingAnimations.has(animation)) {
       loopingAnimations.delete(animation);
@@ -434,7 +464,7 @@ export class SpineLayout extends Container {
    * This will stop all currently playing animations and play the animations in the queue one by one.
    * @param queue - Array of animation names to play
    */
-  async playAnimationsQueue(queue: string[]) {
+  async playAnimationsQueue(queue: string[], onlyOneAtATime = false) {
     if (this.options?.debug) {
       console.log(`Start animations queue:`, queue);
     }
@@ -454,7 +484,7 @@ export class SpineLayout extends Container {
 
         await this.playState(stateName);
       } else {
-        await this.playAnimationByName(animation);
+        await this.playAnimationByName(animation, onlyOneAtATime);
       }
     }
 
