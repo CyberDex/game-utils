@@ -1,5 +1,6 @@
 import {
   AtlasAttachmentLoader,
+  Physics,
   SkeletonData,
   SkeletonJson,
   SlotData,
@@ -260,7 +261,7 @@ export class SpineLayout extends Container {
     }
 
     if (this.activeAnimations.get(spineID)?.get(animation)) {
-      return Promise.resolve();
+      return;
     }
 
     const loop = mod.includes(modificators.loop);
@@ -300,21 +301,60 @@ export class SpineLayout extends Container {
       }
     }
 
-    const animationPromise = new Promise<void>((resolve) => {
-      this.spines.get(spineID)?.state.addListener({
-        complete: async () => {
+    const animationData = spine?.state.data.skeletonData.findAnimation(animation);
+    return new Promise<void>((resolve) => {
+
+      if (animationData) {
+        const durationInSeconds = animationData.duration;
+
+        setTimeout(() => {
           this.removeActiveAnimation(spineID, animation);
 
           resolve();
-        },
-      });
+        }, durationInSeconds * 1000);
+      } else {
+        resolve();
+      }
     }).then(() => {
       if (nextAnimation) {
         this.playAnimationByName(nextAnimation, playSolo);
       }
     });
+  }
 
-    return animationPromise;
+  async playInstanceAnimationLastFrame(spineID: string, animation: string, playSolo = false) {
+    const spines = this.getSpines();
+    const trackSpine = spines.get(spineID);
+
+    if (!trackSpine) {
+      console.error("Track spine not found");
+      return;
+    }
+    const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
+
+    const loop = mod.includes(modificators.loop);
+
+    const activeAnimations = this.activeAnimations.get(spineID)?.size || 0;
+    const activeLoopAnimations = this.loopingAnimations.get(spineID)?.size || 0;
+    let trackID = activeAnimations + activeLoopAnimations;
+
+    if (playSolo) {
+      if (this.activeAnimations.has(spineID) || this.loopingAnimations.has(spineID)) {
+        this.stopAllBySpineID(spineID);
+      }
+
+      trackID = 0;
+    }
+
+    trackSpine.state.setAnimation(trackID, animation, loop);
+
+    const trackEntry = trackSpine.state.getCurrent(0);
+
+    if (trackEntry) {
+      const animationDuration = trackEntry.animationEnd; // or `trackEntry.animation.duration`
+      trackEntry.trackTime = animationDuration;
+      trackSpine.skeleton.updateWorldTransform(Physics.update);
+    }
   }
 
   stopAnimation(spineID: string, animation: string) {
@@ -346,7 +386,7 @@ export class SpineLayout extends Container {
   }
 
   private removeActiveAnimation(spineID: string, animation: string) {
-    let activeAnimations = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    const activeAnimations = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     if (activeAnimations.has(animation)) {
       activeAnimations.delete(animation);
@@ -355,7 +395,7 @@ export class SpineLayout extends Container {
   }
 
   private addActiveAnimation(spineID: string, animation: string, trackID: number) {
-    let activeAnimationsTracks = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    const activeAnimationsTracks = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     activeAnimationsTracks.set(animation, trackID);
 
@@ -363,7 +403,7 @@ export class SpineLayout extends Container {
   }
 
   private addLoopingAnimation(spineID: string, animation: string, trackID: number) {
-    let loopingAnimationsTracks = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    const loopingAnimationsTracks = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     loopingAnimationsTracks.set(animation, trackID);
 
@@ -371,12 +411,22 @@ export class SpineLayout extends Container {
   }
 
   private removeLoopingAnimation(spineID: string, animation: string) {
-    let loopingAnimations = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
+    const loopingAnimations = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
     if (loopingAnimations.has(animation)) {
       loopingAnimations.delete(animation);
       this.loopingAnimations.set(spineID, loopingAnimations);
     }
+  }
+
+  /**
+   * Get all spine instances that were added to the layout.
+   * @returns Map of all spine instances.
+   * The keys are spine IDs and the values are Spine instances.
+   * This will return all spine instances that were added to the layout.
+   */
+  getSpines(): Map<SpineID, Spine> {
+    return this.spines;
   }
 
   /**
