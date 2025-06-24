@@ -3,6 +3,7 @@ import {
   Physics,
   SkeletonData,
   SkeletonJson,
+  Slot,
   SlotData,
   Spine,
   SpineTexture,
@@ -35,6 +36,7 @@ type AnimationsRegistry = Map<SpineID, AnimationName[]>;
 type SpineLayoutOptions = {
   debug?: boolean;
   manifest?: AssetsManifest;
+  skipAttachingSpinesPatterns?: string[];
 };
 
 export type SpineInstanceData = {
@@ -430,6 +432,15 @@ export class SpineLayout extends Container {
   }
 
   /**
+   * Get a spine instance by ID.
+   * @param spineID - ID of the spine instance to get
+   * @returns The spine instance or undefined if not found
+   */
+  getSpineByID(spineID: string): Spine | undefined {
+    return this.spines.get(spineID);
+  }
+
+  /**
    * Get all available animations from all spine instances.
    * @returns Array of all available animations
    */
@@ -669,7 +680,19 @@ export class SpineLayout extends Container {
 
     this.spines.forEach((spine, id) => {
       spine?.state.data.skeletonData.slots.forEach((slot) => {
-        if (slot.name.startsWith(slotPointers.spine)) {
+        let skip = false;
+
+        this.options?.skipAttachingSpinesPatterns?.forEach((pattern) => {
+          if (slot.name.startsWith(`spine_${pattern}`)) {
+            skip = true;
+
+            if (this.options?.debug) {
+              console.log(`Skipping slot ${slot.name} for spine ${id} due to pattern ${pattern}`);
+            }
+          }
+        });
+
+        if (slot.name.startsWith(slotPointers.spine) && !skip) {
           const attachedBones = this.attachBone(slot, spine, slot.name.replace(slotPointers.spine, ''));
 
           if (this.options?.debug) {
@@ -712,6 +735,48 @@ export class SpineLayout extends Container {
         return `${childSpineKey} -> ${slot.name}`;
       }
     }
+  }
+
+  /**
+   * Add a child to a slot of a spine instance.
+   * @param spineID - ID of the spine instance to add the child to
+   * @param slotName - Name of the slot to add the child to
+   * @param child - The child container to add
+   */
+  addSlotChild(spineID: string, slotName: string, child: Container) {
+    const spine = this.spines.get(spineID);
+
+    if (!spine) {
+      console.error(`Spine ${spineID} not found`);
+      return;
+    }
+
+    const slot = spine.skeleton.data.slots.find(slot => slot.name === slotName);
+
+    if (!slot) {
+      console.error(`Slot ${slotName} not found`, spine.skeleton.data.slots);
+
+      return;
+    }
+
+    spine.addSlotObject(slot.name, child);
+  }
+
+  /**
+   * Remove a child from a slot of a spine instance.
+   * @param spineID - ID of the spine instance to remove the child from
+   * @param child - The child container to remove
+   */
+  removeSlotAttachments(spineID: string, slotOrContainer: number | string | Slot | Container) {
+    const spine = this.spines.get(spineID);
+
+    if (!spine) {
+      console.error(`Spine ${spineID} not found`);
+
+      return;
+    }
+
+    spine.removeSlotObject(slotOrContainer);
   }
 
   /**
