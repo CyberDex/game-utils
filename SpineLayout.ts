@@ -304,8 +304,8 @@ export class SpineLayout extends Container {
     }
 
     const animationData = spine?.state.data.skeletonData.findAnimation(animation);
-    return new Promise<void>((resolve) => {
 
+    return new Promise<void>((resolve) => {
       if (animationData) {
         const durationInSeconds = animationData.duration;
 
