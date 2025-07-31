@@ -260,8 +260,8 @@ class Sounds {
     const soundData = this.soundNames.get(soundName);
 
     if (!soundData) {
-      // eslint-disable-next-line no-console
       console.error(`Sound not found: ${soundName}`);
+
       return [];
     }
 
