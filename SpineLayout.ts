@@ -10,6 +10,7 @@ import {
   TextureAtlas,
 } from '@esotericsoftware/spine-pixi-v8';
 import { type AssetsManifest, Container, Text, Texture, type UnresolvedAsset } from 'pixi.js';
+import { Point } from 'pixi.js';
 
 const slotPointers = {
   spine: 'spine_',
@@ -859,6 +860,65 @@ export class SpineLayout extends Container {
     } else {
       bundle.assets.endsWith(type);
     }
+  }
+
+  getBonesGlobalPositionsByNamePattern(pattern: string): { [key: string]: Point } {
+    const positions: { [key: string]: Point } = {};
+
+    this.spines.forEach((spine) => {
+      spine.skeleton.updateWorldTransform(Physics.update);
+
+      spine?.state.data.skeletonData.bones.forEach((bone) => {
+        if (bone.name.startsWith(pattern)) {
+          const globalPos = this.getBoneGlobalPos(spine, bone.name);
+
+          if (globalPos) {
+            positions[bone.name] = globalPos;
+          }
+        }
+      });
+    });
+
+    return positions;
+  }
+
+  getSlotsGlobalPositionsByNamePattern(pattern: string): { [key: string]: Point } {
+    const positions: { [key: string]: Point } = {};
+
+    this.spines.forEach((spine) => {
+      spine.skeleton.updateWorldTransform(Physics.update);
+
+      spine?.state.data.skeletonData.slots.forEach((slot) => {
+        if (slot.name.startsWith(pattern)) {
+          const globalPos = this.getSlotGlobalPos(spine, slot.name);
+
+          if (globalPos) {
+            positions[slot.name] = globalPos;
+          }
+        }
+      });
+    });
+
+    return positions;
+  }
+
+  private getBoneGlobalPos(spine: Spine, boneName: string): Point | null {
+    const bone = spine.skeleton.findBone(boneName);
+    if (!bone) return null;
+
+    const p = spine.toGlobal(new Point(bone.worldX, bone.worldY));
+
+    return p;
+  }
+
+  private getSlotGlobalPos(spine: Spine, slotName: string): Point | null {
+    const slot = spine.skeleton.findSlot(slotName);
+    if (!slot) return null;
+
+    const bone = slot.bone;
+    const p = spine.toGlobal(new Point(bone.worldX, bone.worldY));
+
+    return p;
   }
 }
 
