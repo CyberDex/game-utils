@@ -8,7 +8,7 @@ export class Preloader {
    * Module to load assets
    * @param basePath - The base path for the assets
    */
-  constructor(private basePath?: string) {}
+  constructor(private basePath?: string) { }
 
   /**
    * Load assets
