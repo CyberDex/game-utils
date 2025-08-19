@@ -10,16 +10,19 @@ export class Preloader {
    * Module to load assets
    * @param basePath - The base path for the assets
    */
-  constructor(private manifest: AssetsManifest, private basePath?: string) { }
+  constructor(
+    public readonly manifest: AssetsManifest,
+    private basePath?: string) { }
 
   private async init() {
+    if (this.initiated) return;
+
     await Assets.init({ manifest: this.manifest, basePath: this.basePath });
     this.initiated = true;
   }
 
   /**
    * Load assets
-   * @param manifest - The pixi manifest file containing the assets to be loaded
    * @param bundles - The bundles to be loaded
    * @param onProgress - A callback function to be called on progress
    */
