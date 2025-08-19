@@ -36,7 +36,20 @@ export class Preloader {
     onProgress?.(100);
   }
 
+  /**
+   * Get the cache of loaded assets.
+   * @returns The cache of loaded assets.
+   */
   get cache(): typeof Assets.cache {
     return Assets.cache;
+  }
+
+  /**
+   * Get an asset from the cache.
+   * @param key The key of the asset to retrieve.
+   * @returns The asset if found, or null.
+   */
+  getAsset<T>(key: string): T | null {
+    return Assets.cache.get(key) ?? null;
   }
 }
