@@ -22,4 +22,8 @@ export class Preloader {
 
     onProgress?.(100);
   }
+
+  get cache(): typeof Assets.cache {
+    return Assets.cache;
+  }
 }
