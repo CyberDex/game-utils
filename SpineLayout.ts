@@ -55,6 +55,7 @@ export class SpineLayout extends Container {
   private activeAnimations: Map<string, AnimationTrackRegistry> = new Map();
   private loopingAnimations: Map<string, AnimationTrackRegistry> = new Map();
   private texts: Map<SpineID, Text> = new Map();
+  private skins: Map<SpineID, string[]> = new Map();
 
   constructor(private options?: SpineLayoutOptions) {
     super();
@@ -119,10 +120,65 @@ export class SpineLayout extends Container {
 
     this.addSpineInstance(spineID, spineInstance);
 
+    data.skeleton.skins.forEach((skin) => {
+      const spineSkins = this.skins.get(spineID) || [];
+      const defaultSkin =
+        spineInstance.skeleton.data.findSkin('default') || spineInstance.skeleton.data.findSkin('basic');
+
+      if (defaultSkin) {
+        this.applySpineSkin(spineID, defaultSkin.name);
+      }
+
+      spineSkins.push(skin.name);
+      this.skins.set(spineID, spineSkins);
+    });
+
     if (!skipAttachBones) {
       this.attachBones();
       this.attachTexts();
     }
+  }
+
+  /**
+   * Get all available skins from all spine instances.
+   * @returns Set of all available skins
+   */
+  getAllSkins(): Set<string> {
+    const allSkins = Array.from(this.skins.values()).flat();
+    return new Set(allSkins);
+  }
+
+  applySkin(skin: string) {
+    this.spines.forEach((spine, spineID) => {
+      if (spine.skeleton.data.findSkin(skin)) {
+        this.applySpineSkin(spineID, skin);
+      }
+    });
+  }
+
+  getSpineSkins(skinID: string): string[] {
+    return this.skins.get(skinID) || [];
+  }
+
+  applySpineSkin(spineID: string, skinName: string) {
+    const spine = this.spines.get(spineID);
+
+    if (!spine) {
+      console.warn(`Spine not found: ${spineID}`);
+
+      return;
+    }
+
+    const skin = spine.skeleton.data.findSkin(skinName);
+
+    if (!skin) {
+      console.warn(`Skin not found ${skinName} for spine ${spineID}`);
+
+      return;
+    }
+
+    spine.skeleton.setSkin(skin);
+    spine.skeleton.setSlotsToSetupPose();
   }
 
   /**
@@ -180,6 +236,18 @@ export class SpineLayout extends Container {
     activeStates.delete(stateName);
   }
 
+  pauseState(stateName: string) {
+    const stateAnimations = this.statesAnimations.get(stateName);
+
+    stateAnimations?.forEach((animation) => {
+      this.animations.get(animation)?.forEach((animations, spineID) => {
+        animations.forEach(() => {
+          this.pauseSpineByID(spineID);
+        });
+      });
+    });
+  }
+
   async playOnlyAnimation(animationName: string) {
     this.stopAll();
     this.playAnimationByName(animationName);
@@ -219,6 +287,16 @@ export class SpineLayout extends Container {
     spine.skeleton.setToSetupPose();
     this.activeAnimations.delete(spineID);
     this.loopingAnimations.delete(spineID);
+  }
+
+  pauseSpineByID(spineID: string) {
+    const spine = this.spines.get(spineID);
+
+    if (!spine) {
+      return;
+    }
+
+    spine.state.timeScale = 0;
   }
 
   /**
@@ -282,6 +360,7 @@ export class SpineLayout extends Container {
     }
 
     spine.state.setAnimation(trackID, animation, loop);
+    spine.state.timeScale = 1;
 
     if (!playSolo) {
       if (loop) {
@@ -330,7 +409,7 @@ export class SpineLayout extends Container {
     const trackSpine = spines.get(spineID);
 
     if (!trackSpine) {
-      console.error("Track spine not found");
+      console.error('Track spine not found');
       return;
     }
     const mod = Object.values(modificators).filter((mod) => animation.includes(mod));
@@ -752,7 +831,7 @@ export class SpineLayout extends Container {
       return;
     }
 
-    const slot = spine.skeleton.data.slots.find(slot => slot.name === slotName);
+    const slot = spine.skeleton.data.slots.find((slot) => slot.name === slotName);
 
     if (!slot) {
       console.error(`Slot ${slotName} not found`, spine.skeleton.data.slots);
