@@ -20,7 +20,7 @@ declare global {
   }
 }
 
-export class SpineLayoutEditor {
+export class SpineFSLoader {
   private fs: FileSystemController;
   private onCloseCallbacks: (() => void)[] = [];
   private initiated = false;
@@ -32,8 +32,15 @@ export class SpineLayoutEditor {
     this.init();
   }
 
+  /**
+   * Initialises the SpineLayoutEditor.
+   * This method sets up the file system controller and watches for changes in the spine files.
+   * When files change, it reloads the layout and calls the registered callbacks.
+   */
   async init() {
     await this.fs.init();
+
+    const sotrFilesByName = true;
 
     this.fs.watch(
       async (files: FileHandle[]) => {
@@ -41,14 +48,20 @@ export class SpineLayoutEditor {
           document.location.reload();
         } else {
           this.initiated = true;
+
           await this.renderSpines(files);
           this.onInitCallbacks.forEach((cb) => cb());
         }
       },
-      ['atlas', 'json', 'png', 'skel']
+      ['atlas', 'json', 'png', 'skel'],
+      sotrFilesByName
     );
   }
 
+  /**
+   * Checks if the layout editor is initialised.
+   * @returns {boolean} True if the layout editor is initialised, false otherwise.
+   */
   get isInitialised(): boolean {
     return this.initiated;
   }
@@ -71,6 +84,10 @@ export class SpineLayoutEditor {
     this.onFolderOpenCallbacks.push(cb);
   }
 
+  /**
+   * Add a callback to be called when the layout is initialised.
+   * @param cb Callback to be called when the layout is initialised.
+   */
   onInit(cb: () => void) {
     this.onInitCallbacks.push(cb);
   }
@@ -85,18 +102,27 @@ export class SpineLayoutEditor {
       files.map((file) => file.name)
     );
 
-    await this.loadSpine(files);
+    const spines = await this.loadSpines(files);
+
+    this.layout.createInstancesFromDataArray(spines);
 
     this.onFolderOpenCallbacks.forEach((cb) => cb());
   }
 
+  /**
+   * Closes selected spine folder and resets the layout.
+   */
   close() {
     this.fs.close();
     this.layout?.reset();
     this.onCloseCallbacks.forEach((cb) => cb());
   }
 
-  get initialised(): boolean {
+  /**
+   * Checks if the file system is initialised.
+   * @returns {boolean} True if the file system is initialised, false otherwise.
+   */
+  get isFSInitialised(): boolean {
     return this.fs.initialised;
   }
 
@@ -181,8 +207,9 @@ export class SpineLayoutEditor {
     });
   }
 
-  private async loadSpine(files: FileHandle[]) {
+  private async loadSpines(files: FileHandle[]): Promise<SpineInstanceData[]> {
     const spineFiles = this.convertToSpinesMap(files);
+    const spines: SpineInstanceData[] = [];
 
     for (const spineFileData of Array.from(spineFiles.entries())) {
       if (!this.isFullSetOfSpineFiles(spineFileData[1])) {
@@ -211,10 +238,12 @@ export class SpineLayoutEditor {
         });
 
         if (spineData) {
-          this.layout.createInstanceFromData(spineData);
+          spines.push(spineData);
         }
       }
     }
+
+    return spines;
   }
 
   private isFullSetOfSpineFiles(files: SpineFilesSet): boolean {

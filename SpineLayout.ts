@@ -148,6 +148,10 @@ export class SpineLayout extends Container {
     return new Set(allSkins);
   }
 
+  /**
+   * Apply skin to all spine instances that have the skin.
+   * @param skin - skin name
+   */
   applySkin(skin: string) {
     this.spines.forEach((spine, spineID) => {
       if (spine.skeleton.data.findSkin(skin)) {
@@ -156,10 +160,20 @@ export class SpineLayout extends Container {
     });
   }
 
+  /**
+   * Get available skins for a specific spine instance.
+   * @param skinID - skin name
+   * @returns - Array of available skins for the spine instance
+   */
   getSpineSkins(skinID: string): string[] {
     return this.skins.get(skinID) || [];
   }
 
+  /**
+   * Apply skin to a specific spine instance.
+   * @param spineID - spine id
+   * @param skinName - skin name
+   */
   applySpineSkin(spineID: string, skinName: string) {
     const spine = this.spines.get(spineID);
 
@@ -236,6 +250,10 @@ export class SpineLayout extends Container {
     activeStates.delete(stateName);
   }
 
+  /**
+   * Pause all animations for a specific state.
+   * @param stateName - state name
+   */
   pauseState(stateName: string) {
     const stateAnimations = this.statesAnimations.get(stateName);
 
@@ -248,6 +266,10 @@ export class SpineLayout extends Container {
     });
   }
 
+  /**
+   * Play only the specified animation, stopping all others.
+   * @param animationName - animations name
+   */
   async playOnlyAnimation(animationName: string) {
     this.stopAll();
     this.playAnimationByName(animationName);
@@ -289,6 +311,10 @@ export class SpineLayout extends Container {
     this.loopingAnimations.delete(spineID);
   }
 
+  /**
+   * Pause all animations for a specific spine instance.
+   * @param spineID - spine id
+   */
   pauseSpineByID(spineID: string) {
     const spine = this.spines.get(spineID);
 
@@ -404,6 +430,12 @@ export class SpineLayout extends Container {
     });
   }
 
+  /**
+   * Play spine animation by ID, setting it to the last frame.
+   * @param spineID - spine id
+   * @param animation - animation name
+   * @param playSolo - stop all other animations for this spine id
+   */
   async playInstanceAnimationLastFrame(spineID: string, animation: string, playSolo = false) {
     const spines = this.getSpines();
     const trackSpine = spines.get(spineID);
@@ -439,6 +471,11 @@ export class SpineLayout extends Container {
     }
   }
 
+  /**
+   * Stop specific animation for a spine instance.
+   * @param spineID - spine id
+   * @param animation - animation name
+   */
   stopAnimation(spineID: string, animation: string) {
     const spine = this.spines.get(spineID)?.state;
 
@@ -467,6 +504,11 @@ export class SpineLayout extends Container {
     this.removeActiveAnimation(spineID, animation);
   }
 
+  /**
+   * Remove specific active animation for a spine instance.
+   * @param spineID - spine id
+   * @param animation - animation name
+   */
   private removeActiveAnimation(spineID: string, animation: string) {
     const activeAnimations = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
@@ -476,6 +518,12 @@ export class SpineLayout extends Container {
     }
   }
 
+  /**
+   * Add specific active animation for a spine instance.
+   * @param spineID - spine id
+   * @param animation - animation name
+   * @param trackID - track id
+   */
   private addActiveAnimation(spineID: string, animation: string, trackID: number) {
     const activeAnimationsTracks = this.activeAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
@@ -484,6 +532,12 @@ export class SpineLayout extends Container {
     this.activeAnimations.set(spineID, activeAnimationsTracks);
   }
 
+  /**
+   * Add specific looping animation for a spine instance.
+   * @param spineID - spine id
+   * @param animation - animation name
+   * @param trackID - track id
+   */
   private addLoopingAnimation(spineID: string, animation: string, trackID: number) {
     const loopingAnimationsTracks = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
@@ -492,6 +546,11 @@ export class SpineLayout extends Container {
     this.loopingAnimations.set(spineID, loopingAnimationsTracks);
   }
 
+  /**
+   * Remove specific looping animation for a spine instance.
+   * @param spineID - spine id
+   * @param animation - animetion name
+   */
   private removeLoopingAnimation(spineID: string, animation: string) {
     const loopingAnimations = this.loopingAnimations.get(spineID) ?? new Map<AnimationName, number>();
 
@@ -536,10 +595,18 @@ export class SpineLayout extends Container {
     return Array.from(this.statesAnimations.keys());
   }
 
+  /**
+   * Get all active animations.
+   * @returns - array of active animations
+   */
   getActiveAnimations(): string[] {
     return Array.from(this.activeAnimations.keys());
   }
 
+  /**
+   * Get all looping animations.
+   * @returns - array of looping animations
+   */
   getLoopingAnimations(): string[] {
     return Array.from(this.loopingAnimations.keys());
   }
@@ -708,23 +775,6 @@ export class SpineLayout extends Container {
       return split[0].replace(folderPointers.state, '');
     }
   }
-
-  /**
-   * Get the value of a specific pointer in a string.
-   * This method uses a regular expression to find the pointer in the string.
-   * The pointer should be in the format `pointer_value_` where `pointer` is the name of the pointer and `value` is the value to return.
-   * For example, if the string is `state_walk_next` and the pointer is `state`, it will return `walk`.
-   * If the pointer is not found, it will return undefined.
-   * @param str - The string to search in.
-   * @param pointer - The pointer to search for.
-   * @returns The value of the pointer or undefined if not found.
-   */
-  // private getValue(str: string, pointer: string): string | undefined {
-  //   const regex = new RegExp(`${pointer}_(\\w+?)(?:_|$)`);
-  //   const match = str.match(regex);
-
-  //   return match?.[1];
-  // }
 
   /**
    * Strip modificators from an animation name.
@@ -941,6 +991,11 @@ export class SpineLayout extends Container {
     }
   }
 
+  /**
+   * Get global positions of bones by name pattern.
+   * @param pattern - pattern string
+   * @returns - array of Points
+   */
   getBonesGlobalPositionsByNamePattern(pattern: string): { [key: string]: Point } {
     const positions: { [key: string]: Point } = {};
 
@@ -961,6 +1016,11 @@ export class SpineLayout extends Container {
     return positions;
   }
 
+  /**
+   * Get global positions of slots by name pattern.
+   * @param pattern - string pattern
+   * @returns - array of points
+   */
   getSlotsGlobalPositionsByNamePattern(pattern: string): { [key: string]: Point } {
     const positions: { [key: string]: Point } = {};
 
@@ -981,6 +1041,12 @@ export class SpineLayout extends Container {
     return positions;
   }
 
+  /**
+   * Get global position of a bone by name.
+   * @param spine - spine id
+   * @param boneName - bone name
+   * @returns - Point or null
+   */
   private getBoneGlobalPos(spine: Spine, boneName: string): Point | null {
     const bone = spine.skeleton.findBone(boneName);
     if (!bone) return null;
@@ -990,6 +1056,12 @@ export class SpineLayout extends Container {
     return p;
   }
 
+  /**
+   * Get global position of a slot by name.
+   * @param spine - spine id
+   * @param slotName - slot name
+   * @returns = Point or null
+   */
   private getSlotGlobalPos(spine: Spine, slotName: string): Point | null {
     const slot = spine.skeleton.findSlot(slotName);
     if (!slot) return null;

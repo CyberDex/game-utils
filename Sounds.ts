@@ -8,6 +8,7 @@ export type SoundSettings = {
   muted: boolean;
   musicVolume: number; // 0 to 1
   fxVolume: number; // 0 to 1
+  skin?: string | null;
 };
 
 class Sounds {
@@ -66,7 +67,7 @@ class Sounds {
 
           this.soundNames.set(
             alias,
-            (asset.src as []).map((src) => `assets/${src}`)
+            (asset.src as []).map((src) => `assets/${this.settings.skin ? this.settings.skin + '/' : ''}${src}`)
           );
         });
       }
@@ -79,7 +80,7 @@ class Sounds {
     this.playSounds();
   }
 
-  async playFX(fx: string) {
+  async playFX(fx: string, loop = false) {
     if (!this.userInteraction || !this.initialized) {
       return;
     }
@@ -92,16 +93,27 @@ class Sounds {
     }
 
     const newInstance = this.addAndPlay(fx, {
-      loop: false,
+      loop,
       volume: this.settings.fxVolume,
       mute: this.settings.fxMuted,
     });
+
+    if (!newInstance) {
+      if (this.settings.debug) {
+        console.warn(`Failed to play FX: ${fx} - sound not found`);
+      }
+      return;
+    }
+
+    // console.log(`!!! Playing FX: ${fx}`);
 
     this.fxSounds.set(fx, newInstance);
   }
 
   stopFX(fx: string) {
     const fxInstance = this.fxSounds.get(fx);
+
+    // console.log(`!!! Stopping FX: ${fx}`);
 
     if (fxInstance) {
       fxInstance.stop();
@@ -115,11 +127,11 @@ class Sounds {
 
     this.stopAllMusic();
 
-    const musicInstance = this.musicSounds.get(music)!;
+    const musicInstance = this.musicSounds.get(music);
 
     if (musicInstance) {
       musicInstance.play();
-
+      this.activeMusic = music;
       return;
     }
 
@@ -128,6 +140,13 @@ class Sounds {
       volume: this.settings.musicVolume,
       mute: this.settings.musicMuted,
     });
+
+    if (!newInstance) {
+      if (this.settings.debug) {
+        console.warn(`Failed to play music: ${music} - sound not found`);
+      }
+      return;
+    }
 
     this.musicSounds.set(music, newInstance);
 
@@ -142,7 +161,7 @@ class Sounds {
     this.activeMusic = null;
   }
 
-  private addAndPlay(soundName: string, settings: Partial<HowlOptions>): Howl {
+  private addAndPlay(soundName: string, settings: Partial<HowlOptions>): Howl | null {
     if (this.sounds.has(soundName)) {
       const sound = this.sounds.get(soundName)!;
 
@@ -151,8 +170,18 @@ class Sounds {
       return sound;
     }
 
+    const soundSources = this.getSoundName(soundName);
+
+    // Check if sound sources are valid before creating Howl
+    if (!soundSources || soundSources.length === 0) {
+      if (this.settings.debug) {
+        console.warn(`Cannot create sound instance for "${soundName}": no valid sound sources found`);
+      }
+      return null;
+    }
+
     const sound = new Howl({
-      src: this.getSoundName(soundName),
+      src: soundSources,
       preload: true,
       autoplay: true,
       ...settings,
@@ -260,8 +289,10 @@ class Sounds {
     const soundData = this.soundNames.get(soundName);
 
     if (!soundData) {
-      console.error(`Sound not found: ${soundName}`);
-
+      if (this.settings.debug) {
+        const availableSounds = Array.from(this.soundNames.keys()).join(', ');
+        console.error(`Sound not found: "${soundName}". Available sounds: [${availableSounds}]`);
+      }
       return [];
     }
 
@@ -270,9 +301,12 @@ class Sounds {
     }
 
     if (typeof soundData === 'string') {
-      return [`assets/sounds/${soundData}.ogg`];
+      return [`assets/${this.settings.skin ? this.settings.skin + '/' : ''}sounds/${soundData}.ogg`];
     }
 
+    if (this.settings.debug) {
+      console.error(`Invalid sound data type for "${soundName}":`, soundData);
+    }
     return [];
   }
 }

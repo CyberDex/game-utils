@@ -109,7 +109,7 @@ export class FileSystemController {
     return null;
   }
 
-  async watch(onChange: (files: FileHandle[]) => void, fileTypes?: string[]) {
+  async watch(onChange: (files: FileHandle[]) => void, fileTypes?: string[], sortByName = false) {
     if (!this.dirHandle) {
       return;
     }
@@ -138,6 +138,10 @@ export class FileSystemController {
           console.error(error);
         }
       }
+    }
+
+    if (sortByName) {
+      changedFiles.sort((a, b) => a.name.localeCompare(b.name));
     }
 
     if (changedFiles.length > 0) {

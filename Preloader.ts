@@ -1,4 +1,4 @@
-import { ArrayOr, Assets, type AssetsManifest } from 'pixi.js';
+import { Assets, type AssetsManifest } from 'pixi.js';
 
 /**
  * Preloader class to load assets for the game
@@ -12,7 +12,9 @@ export class Preloader {
    */
   constructor(
     public readonly manifest: AssetsManifest,
-    private basePath?: string) { }
+    private basePath?: string) {
+    this.init();
+  }
 
   private async init() {
     if (this.initiated) return;
@@ -26,9 +28,10 @@ export class Preloader {
    * @param bundles - The bundles to be loaded
    * @param onProgress - A callback function to be called on progress
    */
-  async load(bundles: ArrayOr<string>, onProgress?: (progress: number) => void): Promise<void> {
+  async load(manifest: AssetsManifest, bundles: string[] = [], onProgress?: (progress: number) => void): Promise<void> {
     if (!this.initiated) {
-      await this.init();
+      await Assets.init({ manifest: manifest, basePath: this.basePath });
+      this.initiated = true;
     }
 
     await Assets.loadBundle(bundles, (progress) => onProgress?.(progress * 100));
