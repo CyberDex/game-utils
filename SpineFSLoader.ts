@@ -2,7 +2,7 @@
 import { Assets, type UnresolvedAsset } from 'pixi.js';
 
 import { type FileData, type FileHandle, FileSystemController } from './FileSystemController';
-import { type SpineInstanceData, SpineLayout } from './spine-layout/SpineLayout';
+import { type SpineInstanceData, SpineLayout } from '../spine-layout/SpineLayout';
 
 declare global {
   interface Window {
